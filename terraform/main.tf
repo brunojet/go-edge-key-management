@@ -5,12 +5,13 @@ module "key_rotator" {
   lambda_zip          = var.lambda_zip
   handler             = var.handler
   runtime             = var.runtime
-  schedule_expression = var.schedule_expression
+  rotation_days       = var.rotation_days
   secret_name         = var.secret_name
-  kms_key_arn         = var.kms_key_arn
   tags                = var.tags
-  key_group_id        = var.key_group_id
   key_group_name      = var.key_group_name
   lambda_memory_size  = var.lambda_memory_size
   lambda_timeout      = var.lambda_timeout
+  key_retention_days       = var.key_retention_days
+  min_public_keys_to_keep  = var.min_public_keys_to_keep
+  only_delete_managed_keys = var.only_delete_managed_keys
 }

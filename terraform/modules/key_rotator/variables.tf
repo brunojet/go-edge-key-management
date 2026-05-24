@@ -16,23 +16,13 @@ variable "runtime" {
   default = "provided.al2023"
 }
 
-variable "schedule_expression" {
-  type    = string
-  default = "rate(7 days)"
+variable "rotation_days" {
+  type    = number
+  default = 7
 }
 
 variable "secret_name" {
   type = string
-  default = ""
-}
-
-variable "kms_key_arn" {
-  type    = string
-  default = ""
-}
-
-variable "key_group_id" {
-  type    = string
   default = ""
 }
 
@@ -59,4 +49,19 @@ variable "lambda_timeout" {
 variable "tags" {
   type    = map(string)
   default = {}
+}
+
+variable "key_retention_days" {
+  type    = number
+  default = 30
+}
+
+variable "min_public_keys_to_keep" {
+  type    = number
+  default = 2
+}
+
+variable "only_delete_managed_keys" {
+  type    = bool
+  default = true
 }

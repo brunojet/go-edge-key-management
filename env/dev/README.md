@@ -18,6 +18,5 @@ terraform apply -var-file=../env/dev/terraform.tfvars
 ```
 
 Notas:
-- Para PoC usamos a chave KMS gerida pelo serviço (sem CMK). Para ativar CMK defina `kms_key_arn` em `terraform.tfvars`.
 - O módulo gera um `secret_name` padrão baseado em `var.name` se `secret_name` não for fornecido: `/<var.name>/rotator`.
 - Certifique-se que o bucket S3 `brunojet-tfstate` existe antes de executar `terraform init`.

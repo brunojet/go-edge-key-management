@@ -29,7 +29,7 @@ go run ./cmd/rotator
 ```
 
 2. Completar módulo Terraform:
-   - Parâmetros: `secret_name`, `kms_key_arn` (opcional), `schedule_expression`, `lambda_zip`
+   - Parâmetros: `secret_name`, `rotation_days`, `lambda_zip`
    - Outputs: `secret_arn`, `secret_name`, `lambda_role_arn`
 
 3. Atualizar `media_proxy` para aceitar `signed_urls_key_group_id` externo.
@@ -61,7 +61,6 @@ Permissões mínimas (Lambda role)
 - `secretsmanager:GetSecretValue`, `secretsmanager:PutSecretValue`, `secretsmanager:DescribeSecret` (no secret ARN)
 - `cloudfront:CreatePublicKey`, `cloudfront:GetPublicKey`, `cloudfront:CreateKeyGroup`, `cloudfront:GetKeyGroup`, `cloudfront:UpdateKeyGroup`
 - `logs:CreateLogStream`, `logs:PutLogEvents`
-- `kms:*` apenas se `kms_key_arn` for usado (CMK) — preferir CMK se precisar de controle/auditoria
 
 Checklist de migração para o repo final
 --------------------------------------
@@ -72,16 +71,16 @@ Checklist de migração para o repo final
 Perguntas em aberto
 -------------------
 1. Intervalo de rotação desejado? (ex.: `24h`, `7d`)
-2. Usaremos CMK gerida pelo cliente (`kms_key_arn`) ou a chave gerida pelo serviço?
+2. Usaremos CMK gerida pelo cliente ou a chave gerida pelo serviço?
 3. Deseja histórico além de `current` + `previous`?
 4. Quer endpoint/manual trigger para forçar rotação?
 
 Decisões tomadas
 ----------------
-- **Intervalo de rotação:** `7d` (agendamento via EventBridge / `schedule_expression = "rate(7 days)"`).
+- **Intervalo de rotação:** `7d` (gerenciado pelo Secrets Manager via `rotation_days`).
 - **KMS:** usar chave gerida pelo serviço (sem CMK) para PoC — mais simples e rápido para validar.
 - **Histórico de chaves:** manter `current` e `previous` somente.
-- **Agendamento:** o módulo [terraform/modules/key_rotator/variables.tf](terraform/modules/key_rotator/variables.tf) já cria a rule/target/permission — `schedule_expression` default foi ajustado para `rate(7 days)`.
+- **Agendamento:** a rotação é agora gerenciada pelo Secrets Manager utilizando o recurso `aws_secretsmanager_secret_rotation` (parâmetro `rotation_days`).
 
 Observações finais
 ------------------

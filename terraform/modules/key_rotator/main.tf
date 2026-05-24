@@ -34,63 +34,50 @@ resource "aws_lambda_function" "rotator" {
     variables = {
       SECRET_NAME  = aws_secretsmanager_secret.rotator_secret.name
       NAME_PREFIX  = var.name
-      KEY_GROUP_ID   = local.key_group_id_effective
       KEY_GROUP_NAME = local.key_group_name_effective
+      KEY_RETENTION_DAYS       = tostring(var.key_retention_days)
+      MIN_PUBLIC_KEYS_TO_KEEP  = tostring(var.min_public_keys_to_keep)
+      ONLY_DELETE_MANAGED_KEYS = tostring(var.only_delete_managed_keys)
     }
   }
 }
 
-resource "aws_cloudwatch_event_rule" "schedule" {
-  name                = "${var.name}-rotator-schedule"
-  schedule_expression = var.schedule_expression
-}
-
-resource "aws_cloudwatch_event_target" "lambda_target" {
-  rule      = aws_cloudwatch_event_rule.schedule.name
-  target_id = "Lambda"
-  arn       = aws_lambda_function.rotator.arn
-}
-
-resource "aws_lambda_permission" "allow_event" {
-  statement_id  = "AllowExecutionFromCloudWatch"
+resource "aws_lambda_permission" "allow_secretsmanager" {
+  statement_id  = "AllowExecutionFromSecretsManager"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.rotator.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.schedule.arn
+  principal     = "secretsmanager.amazonaws.com"
+  source_arn    = aws_secretsmanager_secret.rotator_secret.arn
+}
+
+resource "aws_secretsmanager_secret_rotation" "rotator_rotation" {
+  secret_id            = aws_secretsmanager_secret.rotator_secret.id
+  rotation_lambda_arn  = aws_lambda_function.rotator.arn
+  rotation_rules {
+    automatically_after_days = var.rotation_days
+  }
+
+  depends_on = [aws_lambda_permission.allow_secretsmanager]
 }
 
 # Secrets Manager secret created by infra; Lambda will populate secret values (current/previous) at runtime.
 resource "aws_secretsmanager_secret" "rotator_secret" {
   name        = local.secret_name_effective
   description = "Secret for key rotator: stores current and previous private keys and metadata"
-  kms_key_id  = var.kms_key_arn != "" ? var.kms_key_arn : null
   tags        = var.tags
 }
 
-# Optionally create a CloudFront KeyGroup if the caller did not supply one.
-resource "aws_cloudfront_key_group" "rotator_key_group" {
-  count = var.key_group_id == "" && length(var.initial_public_key_ids) > 0 ? 1 : 0
-  name  = var.key_group_name != "" ? var.key_group_name : "${var.name}-key-group"
-  items = var.initial_public_key_ids
-
-  lifecycle {
-    # Allow the Lambda to add/remove public keys at runtime without Terraform attempting to revert
-    ignore_changes = [items]
-  }
-}
-
 locals {
-  # Effective KeyGroup ID: prefer caller-supplied var, otherwise the optionally-created resource
-  key_group_id_effective = var.key_group_id != "" ? var.key_group_id : (length(aws_cloudfront_key_group.rotator_key_group) > 0 ? aws_cloudfront_key_group.rotator_key_group[0].id : "")
-  # Effective KeyGroup name: prefer caller-supplied var, otherwise derive from created resource or default
-  key_group_name_effective = var.key_group_name != "" ? var.key_group_name : (length(aws_cloudfront_key_group.rotator_key_group) > 0 ? aws_cloudfront_key_group.rotator_key_group[0].name : "${var.name}-key-group")
+  # Effective KeyGroup name: prefer caller-supplied var, otherwise default derived from module name
+  key_group_name_effective = var.key_group_name != "" ? var.key_group_name : "${var.name}-key-group"
 
   secrets_stmt = {
     Effect = "Allow"
     Action = [
       "secretsmanager:GetSecretValue",
       "secretsmanager:PutSecretValue",
-      "secretsmanager:DescribeSecret"
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:UpdateSecretVersionStage"
     ]
     Resource = [aws_secretsmanager_secret.rotator_secret.arn]
   }
@@ -98,25 +85,16 @@ locals {
   cloudfront_stmt = {
     Effect = "Allow"
     Action = [
-      "cloudfront:CreatePublicKey",
       "cloudfront:ListPublicKeys",
       "cloudfront:GetPublicKey",
+      "cloudfront:CreatePublicKey",
+      "cloudfront:DeletePublicKey",
+      "cloudfront:ListKeyGroups",
       "cloudfront:CreateKeyGroup",
       "cloudfront:GetKeyGroup",
       "cloudfront:UpdateKeyGroup"
     ]
     Resource = ["*"]
-  }
-
-  kms_stmt = {
-    Effect = "Allow"
-    Action = [
-      "kms:Decrypt",
-      "kms:Encrypt",
-      "kms:GenerateDataKey",
-      "kms:DescribeKey"
-    ]
-    Resource = [var.kms_key_arn]
   }
 
   sts_stmt = {
@@ -126,8 +104,7 @@ locals {
   }
 
   statements = concat(
-    [local.secrets_stmt, local.cloudfront_stmt, local.sts_stmt],
-    var.kms_key_arn != "" ? [local.kms_stmt] : []
+    [local.secrets_stmt, local.cloudfront_stmt, local.sts_stmt]
   )
 
   lambda_policy = {

@@ -17,9 +17,9 @@ variable "runtime" {
 }
 
 
-variable "schedule_expression" {
-  type    = string
-  default = "rate(7 days)"
+variable "rotation_days" {
+  type    = number
+  default = 7
 }
 
 variable "secret_name" {
@@ -27,15 +27,6 @@ variable "secret_name" {
   default = ""
 }
 
-variable "kms_key_arn" {
-  type    = string
-  default = ""
-}
-
-variable "key_group_id" {
-  type    = string
-  default = ""
-}
 
 variable "key_group_name" {
   type    = string
@@ -65,4 +56,19 @@ variable "tags" {
 variable "aws_region" {
   type    = string
   default = "us-east-1"
+}
+
+variable "key_retention_days" {
+  type    = number
+  default = 30
+}
+
+variable "min_public_keys_to_keep" {
+  type    = number
+  default = 2
+}
+
+variable "only_delete_managed_keys" {
+  type    = bool
+  default = true
 }
