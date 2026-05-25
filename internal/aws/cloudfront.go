@@ -26,7 +26,7 @@ func CreatePublicKey(ctx context.Context, cf CloudFrontClient, domain *domain.Se
 	input := &cloudfront.CreatePublicKeyInput{
 		PublicKeyConfig: &cfTypes.PublicKeyConfig{
 			CallerReference: aws.String(fmt.Sprintf("%s-%d", domain.NamePrefix, time.Now().UnixNano())),
-			Name:            aws.String(fmt.Sprintf("%s-%s", domain.NamePrefix, domain.Fingerprint[:8])),
+			Name:            aws.String(domain.PublicKeyName()),
 			EncodedKey:      aws.String(domain.PublicPEM),
 		},
 	}
@@ -36,7 +36,7 @@ func CreatePublicKey(ctx context.Context, cf CloudFrontClient, domain *domain.Se
 		return "", fmt.Errorf("create public key: %w", err)
 	}
 	id := aws.ToString(out.PublicKey.Id)
-	log.Printf("CloudFront public key created — id: %s, name: %s", id, aws.ToString(input.PublicKeyConfig.Name))
+	log.Printf("CloudFront public key created — id: %s, name: %s", id, domain.PublicKeyName())
 	return id, nil
 }
 
@@ -128,6 +128,31 @@ func getKeyGroupByName(ctx context.Context, cf CloudFrontClient, name string) (*
 		return nil, fmt.Errorf("get key group for test: %w", err)
 	}
 	return got, nil
+}
+
+func FindPublicKeyIDInKeyGroupByName(ctx context.Context, cf CloudFrontClient, domain *domain.SecretPayload) (string, error) {
+	got, err := getKeyGroupByName(ctx, cf, domain.KeyGroupName)
+	if err != nil {
+		return "", err
+	}
+	if got == nil || got.KeyGroup == nil || got.KeyGroup.KeyGroupConfig == nil {
+		return "", nil
+	}
+	for _, item := range got.KeyGroup.KeyGroupConfig.Items {
+		pkOut, err := cf.GetPublicKey(ctx, &cloudfront.GetPublicKeyInput{Id: aws.String(item)})
+		if err != nil {
+			if isNotFoundCloudFront(err) {
+				continue
+			}
+			return "", fmt.Errorf("get public key %s: %w", item, err)
+		}
+		if pkOut != nil && pkOut.PublicKey != nil && pkOut.PublicKey.PublicKeyConfig != nil {
+			if aws.ToString(pkOut.PublicKey.PublicKeyConfig.Name) == domain.PublicKeyName() {
+				return item, nil
+			}
+		}
+	}
+	return "", nil
 }
 
 func FindPublicKeyIDInKeyGroupByPEM(ctx context.Context, cf CloudFrontClient, keyGroupName, publicPEM string) (string, error) {

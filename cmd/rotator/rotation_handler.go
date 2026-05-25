@@ -90,7 +90,7 @@ func RotationHandler(ctx context.Context, event rotationEvent) error {
 		if pending == nil {
 			return fmt.Errorf("no pending version %s", event.ClientRequestToken)
 		}
-		foundID, err := awsclient.FindPublicKeyIDInKeyGroupByPEM(ctx, clients.CloudFront, cfg.KeyGroupName, pending.PublicPEM)
+		foundID, err := awsclient.FindPublicKeyIDInKeyGroupByName(ctx, clients.CloudFront, pending)
 		if err != nil {
 			return fmt.Errorf("search public key in key group: %w", err)
 		}

@@ -2,7 +2,10 @@
 // It has no dependencies on other internal packages, which prevents import cycles.
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // KeyPair holds a generated RSA key pair and its metadata.
 type KeyPair struct {
@@ -20,4 +23,12 @@ type SecretPayload struct {
 	CreatedAt    time.Time `json:"created_at"`
 	KeyGroupName string    `json:"key_group_name"`
 	NamePrefix   string    `json:"name_prefix"`
+}
+
+func (p *SecretPayload) PublicKeyName() string {
+	prefix := p.Fingerprint
+	if len(prefix) > 8 {
+		prefix = prefix[:8]
+	}
+	return fmt.Sprintf("%s-%s", p.NamePrefix, prefix)
 }
