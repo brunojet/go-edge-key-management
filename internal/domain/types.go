@@ -2,10 +2,7 @@
 // It has no dependencies on other internal packages, which prevents import cycles.
 package domain
 
-import (
-	"fmt"
-	"time"
-)
+import "time"
 
 // KeyPair holds a generated RSA key pair and its metadata.
 type KeyPair struct {
@@ -25,10 +22,11 @@ type SecretPayload struct {
 	NamePrefix   string    `json:"name_prefix"`
 }
 
-func (p *SecretPayload) PublicKeyName() string {
-	prefix := p.Fingerprint
-	if len(prefix) > 8 {
-		prefix = prefix[:8]
-	}
-	return fmt.Sprintf("%s-%s", p.NamePrefix, prefix)
+// CdnKey holds only the data a CDN key distribution adapter needs.
+// It contains no private key material.
+type CdnKey struct {
+	Name      string // key name in the CDN (e.g. "myapp-abc12345")
+	PEM       string // PEM-encoded public key
+	GroupName string // key group to associate with
 }
+

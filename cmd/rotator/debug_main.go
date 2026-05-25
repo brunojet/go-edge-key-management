@@ -7,52 +7,35 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"time"
+
+	"github.com/brunojet/go-edge-key-management/internal/handler"
+	"github.com/brunojet/go-edge-key-management/internal/rotator"
 )
 
 func main() {
 	// CLI flags to drive rotation steps locally.
-	step := flag.String("step", "createSecret", "rotation step: createSecret|setSecret|testSecret|finishSecret")
-	token := flag.String("token", "", "ClientRequestToken to use (default: generated)")
-	secret := flag.String("secret", "", "Secrets Manager secret name or ARN (optional)")
-	keyGroupName := flag.String("key-group-name", "", "CloudFront KeyGroup name (optional)")
-	namePrefix := flag.String("name-prefix", "go-edge", "resource name prefix")
-	keyRetentionDays := flag.Int("key-retention-days", 30, "key retention days")
-	minPublicKeys := flag.Int("min-public-keys-to-keep", 2, "minimum public keys to keep")
-	onlyDeleteManaged := flag.Bool("only-delete-managed-keys", true, "only delete managed keys")
-	runAll := flag.Bool("run-all", false, "run all rotation steps in sequence: createSecret,setSecret,testSecret,finishSecret")
-	delay := flag.Int("delay", 2, "seconds to wait between steps when running full sequence")
+	// All flags are parsed manually to avoid importing "flag" into the non-debug build.
+	step := flagStr("step", "createSecret")
+	token := flagStr("token", "")
+	secret := flagStr("secret", "")
+	keyGroupName := flagStr("key-group-name", "")
+	namePrefix := flagStr("name-prefix", "go-edge")
+	runAll := flagBool("run-all", false)
+	delay := flagInt("delay", 2)
 
-	flag.Parse()
-
-	// Ensure ClientRequestToken meets AWS Secrets Manager constraint
-	// (minimum length 32). If the provided token is empty or too short,
-	// generate a secure random token (hex-encoded 16 bytes = 32 chars).
-	makeSecureToken := func(seed string) string {
-		b := make([]byte, 16)
-		if _, err := rand.Read(b); err != nil {
-			return fmt.Sprintf("%s-%d", seed, time.Now().UnixNano())
-		}
-		h := hex.EncodeToString(b)
-		if seed != "" {
-			return fmt.Sprintf("%s-%s", seed, h)
-		}
-		return h
-	}
-
+	// Ensure ClientRequestToken meets the AWS Secrets Manager 32-char minimum.
 	if *token == "" {
-		*token = makeSecureToken("debug")
+		*token = secureToken("debug")
 	} else if len(*token) < 32 {
-		log.Printf("provided token too short (%d chars), generating secure token", len(*token))
-		*token = makeSecureToken(*token)
+		log.Printf("token too short (%d chars), generating secure token", len(*token))
+		*token = secureToken(*token)
 	}
 
-	// Export env vars consumed by rotator.Load(). Prefer explicit flags,
-	// otherwise derive sensible defaults for local debugging.
+	// Export env vars consumed by rotator.Load().
 	if *secret != "" {
 		os.Setenv("SECRET_NAME", *secret)
 	}
@@ -60,15 +43,15 @@ func main() {
 	if *keyGroupName != "" {
 		os.Setenv("KEY_GROUP_NAME", *keyGroupName)
 	} else {
-		// Derive a default KeyGroup name for local debugging so Load() passes validation.
 		os.Setenv("KEY_GROUP_NAME", fmt.Sprintf("%s-key-group", *namePrefix))
 	}
-	os.Setenv("KEY_RETENTION_DAYS", fmt.Sprintf("%d", *keyRetentionDays))
-	os.Setenv("MIN_PUBLIC_KEYS_TO_KEEP", fmt.Sprintf("%d", *minPublicKeys))
-	os.Setenv("ONLY_DELETE_MANAGED_KEYS", fmt.Sprintf("%t", *onlyDeleteManaged))
 
-	// Build rotation event used for single-step or sequential execution.
-	evt := rotationEvent{
+	h, err := handler.New(context.Background())
+	if err != nil {
+		log.Fatalf("init: %v", err)
+	}
+
+	evt := rotator.RotationEvent{
 		Step:               *step,
 		SecretId:           os.Getenv("SECRET_NAME"),
 		ClientRequestToken: *token,
@@ -82,8 +65,8 @@ func main() {
 		for i, s := range steps {
 			evt.Step = s
 			log.Printf("debug: running step %d/%d: %s", i+1, len(steps), s)
-			if err := RotationHandler(context.Background(), evt); err != nil {
-				log.Fatalf("RotationHandler error on %s: %v", s, err)
+			if err := h.Handle(context.Background(), evt); err != nil {
+				log.Fatalf("Handle error on %s: %v", s, err)
 			}
 			if i < len(steps)-1 {
 				log.Printf("debug: sleeping %d seconds before next step", *delay)
@@ -93,7 +76,55 @@ func main() {
 		return
 	}
 
-	if err := RotationHandler(context.Background(), evt); err != nil {
-		log.Fatalf("RotationHandler error: %v", err)
+	if err := h.Handle(context.Background(), evt); err != nil {
+		log.Fatalf("Handle error: %v", err)
 	}
+}
+
+func secureToken(seed string) string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%s-%d", seed, time.Now().UnixNano())
+	}
+	h := hex.EncodeToString(b)
+	if seed != "" {
+		return fmt.Sprintf("%s-%s", seed, h)
+	}
+	return h
+}
+
+// flagStr / flagBool / flagInt are minimal flag parsers so that debug_main.go
+// does not pull in the "flag" package at all in the non-debug build.
+func flagStr(name, def string) *string {
+	v := def
+	for i, arg := range os.Args[1:] {
+		if arg == "--"+name || arg == "-"+name {
+			if i+1 < len(os.Args[1:]) {
+				v = os.Args[i+2]
+			}
+		}
+	}
+	return &v
+}
+
+func flagBool(name string, def bool) *bool {
+	v := def
+	for _, arg := range os.Args[1:] {
+		if arg == "--"+name || arg == "-"+name {
+			v = true
+		}
+	}
+	return &v
+}
+
+func flagInt(name string, def int) *int {
+	v := def
+	for i, arg := range os.Args[1:] {
+		if arg == "--"+name || arg == "-"+name {
+			if i+1 < len(os.Args[1:]) {
+				fmt.Sscanf(os.Args[i+2], "%d", &v)
+			}
+		}
+	}
+	return &v
 }

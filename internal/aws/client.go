@@ -3,7 +3,7 @@ package awsclient
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -25,7 +25,7 @@ func NewClients(ctx context.Context) (*Clients, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 	cfg.Retryer = NewRetryerProvider([]string{"InUse", "Conflict"}, 5)
-	log.Printf("AWS config loaded — region: %s", cfg.Region)
+	slog.Default().Info("AWS config loaded", "region", cfg.Region)
 	if err := verifyIdentity(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("aws identity check: %w", err)
 	}
@@ -43,6 +43,6 @@ func verifyIdentity(ctx context.Context, cfg aws.Config) error {
 	if err != nil {
 		return fmt.Errorf("sts get-caller-identity: %w", err)
 	}
-	log.Printf("AWS identity confirmed — account: %s, arn: %s", aws.ToString(out.Account), aws.ToString(out.Arn))
+	slog.Default().Info("AWS identity confirmed", "account", aws.ToString(out.Account), "arn", aws.ToString(out.Arn))
 	return nil
 }

@@ -2,170 +2,148 @@ package awsclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
-	"strings"
-	"time"
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-
-	"github.com/brunojet/go-edge-key-management/internal/domain"
 )
 
-func GetPayload(ctx context.Context, sm SecretsManagerClient, secretName string) (*domain.SecretPayload, error) {
-	out, err := sm.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+// SecretsService implements rotator.SecretStore[T] using AWS Secrets Manager.
+// T is the application-specific payload type stored as JSON — no secrets-manager
+// coupling leaks into the caller.
+type SecretsService[T any] struct {
+	client SecretsManagerClient
+	logger *slog.Logger
+}
+
+// NewSecretsService constructs a SecretsService for payload type T.
+func NewSecretsService[T any](client SecretsManagerClient, logger *slog.Logger) *SecretsService[T] {
+	return &SecretsService[T]{client: client, logger: logger}
+}
+
+// VerifyConnectivity confirms the secret resource exists and the AWS credentials
+// are valid. Should be called once at startup before any rotation steps.
+// Not part of the SecretStore port — this is a deployment-time check.
+func (s *SecretsService[T]) VerifyConnectivity(ctx context.Context, secretName string) error {
+	_, err := s.client.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
 		SecretId: aws.String(secretName),
 	})
 	if err != nil {
 		if IsNotFound(err) {
-			if _, derr := sm.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
-				SecretId: aws.String(secretName),
-			}); derr != nil {
-				if IsNotFound(derr) {
-					return nil, fmt.Errorf("secret resource %q not found; create it via Terraform before invoking the rotator", secretName)
-				}
-				return nil, fmt.Errorf("describe secret: %w", derr)
-			}
-			log.Printf("Secret %s exists but has no value — will write initial payload", secretName)
-			return &domain.SecretPayload{}, nil
+			return fmt.Errorf("secret %q not found; create it via Terraform before invoking the rotator", secretName)
+		}
+		return fmt.Errorf("secrets manager connectivity check: %w", err)
+	}
+	s.logger.Info("Secrets Manager connectivity confirmed", "secret", secretName)
+	return nil
+}
+
+// GetCurrent retrieves and deserialises the current secret value into T.
+// Returns a zero-value T when the secret exists but has no value yet (new secret).
+// The caller is responsible for verifying the secret resource exists via
+// VerifyConnectivity before calling this method.
+func (s *SecretsService[T]) GetCurrent(ctx context.Context, secretName string) (*T, error) {
+	out, err := s.client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(secretName),
+	})
+	if err != nil {
+		if IsNotFound(err) {
+			s.logger.Info("secret has no value yet, returning zero value", "secret", secretName)
+			var zero T
+			return &zero, nil
 		}
 		return nil, fmt.Errorf("get secret value: %w", err)
 	}
 	if out.SecretString == nil {
-		return &domain.SecretPayload{}, nil
+		var zero T
+		return &zero, nil
 	}
-	var payload domain.SecretPayload
-	if err := json.Unmarshal([]byte(*out.SecretString), &payload); err != nil {
-		return nil, fmt.Errorf("unmarshal secret payload: %w", err)
+	v, err := unmarshal[T](*out.SecretString)
+	if err != nil {
+		return nil, err
 	}
-	log.Printf("Secret payload retrieved — version: %s", aws.ToString(out.VersionId))
-	return &payload, nil
+	s.logger.Info("secret payload retrieved", "version", aws.ToString(out.VersionId))
+	return v, nil
 }
 
-func PutPayload(ctx context.Context, sm SecretsManagerClient, secretName string, payload *domain.SecretPayload) error {
-	b, err := json.Marshal(payload)
+// SetPending serialises payload, writes it as a new version identified by token,
+// and moves the AWSPENDING stage to that version.
+func (s *SecretsService[T]) SetPending(ctx context.Context, secretName string, payload *T, token string) error {
+	b, err := marshal[T](payload)
 	if err != nil {
-		return fmt.Errorf("marshal secret payload: %w", err)
-	}
-	out, err := sm.PutSecretValue(ctx, &secretsmanager.PutSecretValueInput{
-		SecretId:     aws.String(secretName),
-		SecretString: aws.String(string(b)),
-	})
-	if err != nil {
-		return fmt.Errorf("put secret value: %w", err)
-	}
-	log.Printf("Secret saved — version: %s", aws.ToString(out.VersionId))
-	return nil
-}
-
-func PutPayloadVersion(ctx context.Context, sm SecretsManagerClient, secretName string, payload *domain.SecretPayload, clientRequestToken string) error {
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal secret payload: %w", err)
+		return err
 	}
 	input := &secretsmanager.PutSecretValueInput{
 		SecretId:     aws.String(secretName),
 		SecretString: aws.String(string(b)),
 	}
-	if clientRequestToken != "" {
-		input.ClientRequestToken = aws.String(clientRequestToken)
+	if token != "" {
+		input.ClientRequestToken = aws.String(token)
 	}
-	out, err := sm.PutSecretValue(ctx, input)
+	out, err := s.client.PutSecretValue(ctx, input)
 	if err != nil {
-		return fmt.Errorf("put secret value (version): %w", err)
+		return fmt.Errorf("put secret value: %w", err)
 	}
-	log.Printf("Secret pending version written — version: %s", aws.ToString(out.VersionId))
-	prevPending, err := GetVersionWithStage(ctx, sm, secretName, "AWSPENDING")
-	if err != nil {
-		return fmt.Errorf("determine previous AWSPENDING: %w", err)
-	}
-	newVid := aws.ToString(out.VersionId)
-	if prevPending == newVid {
-		log.Printf("version %s already has AWSPENDING", newVid)
-	} else {
-		in := &secretsmanager.UpdateSecretVersionStageInput{
-			SecretId:        aws.String(secretName),
-			VersionStage:    aws.String("AWSPENDING"),
-			MoveToVersionId: aws.String(newVid),
-		}
-		if prevPending != "" {
-			in.RemoveFromVersionId = aws.String(prevPending)
-		}
-		if _, err := sm.UpdateSecretVersionStage(ctx, in); err != nil {
-			return fmt.Errorf("update secret version stage to AWSPENDING: %w", err)
-		}
-	}
-	time.Sleep(500 * time.Millisecond)
-	return nil
+	s.logger.Info("secret pending version written", "version", aws.ToString(out.VersionId))
+	return s.movePendingStage(ctx, secretName, aws.ToString(out.VersionId))
 }
 
-func GetPayloadVersion(ctx context.Context, sm SecretsManagerClient, secretName, versionID string) (*domain.SecretPayload, error) {
-	out, err := sm.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+// GetPending retrieves the secret version identified by token, deserialised into T.
+// Returns (nil, nil) when that version does not exist yet.
+func (s *SecretsService[T]) GetPending(ctx context.Context, secretName, token string) (*T, error) {
+	out, err := s.client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId:  aws.String(secretName),
-		VersionId: aws.String(versionID),
+		VersionId: aws.String(token),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get secret value (version): %w", err)
+		if IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get pending version %s: %w", token, err)
 	}
 	if out.SecretString == nil {
-		return &domain.SecretPayload{}, nil
+		var zero T
+		return &zero, nil
 	}
-	var payload domain.SecretPayload
-	if err := json.Unmarshal([]byte(*out.SecretString), &payload); err != nil {
-		return nil, fmt.Errorf("unmarshal secret payload (version): %w", err)
-	}
-	return &payload, nil
+	return unmarshal[T](*out.SecretString)
 }
 
-func GetVersionWithStage(ctx context.Context, sm SecretsManagerClient, secretName, stage string) (string, error) {
-	out, err := sm.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{SecretId: aws.String(secretName)})
+// PromotePending moves the secret identified by token from AWSPENDING to AWSCURRENT.
+// Idempotent: if token is already AWSCURRENT, only the AWSPENDING stage is removed.
+func (s *SecretsService[T]) PromotePending(ctx context.Context, secretName, token string) error {
+	currentVersion, err := s.getVersionWithStage(ctx, secretName, "AWSCURRENT")
 	if err != nil {
-		return "", fmt.Errorf("describe secret for versions: %w", err)
+		return fmt.Errorf("find current version: %w", err)
 	}
-	if out.VersionIdsToStages == nil {
-		return "", nil
+	if currentVersion == token {
+		s.logger.Info("version already AWSCURRENT, removing AWSPENDING", "version", token)
+		return s.DiscardPending(ctx, secretName, token)
 	}
-	for vid, stages := range out.VersionIdsToStages {
-		for _, s := range stages {
-			if s == stage {
-				return vid, nil
-			}
-		}
-	}
-	return "", nil
-}
-
-func PromoteVersionToCurrent(ctx context.Context, sm SecretsManagerClient, secretName, versionID, previousVersion string) error {
 	in := &secretsmanager.UpdateSecretVersionStageInput{
 		SecretId:        aws.String(secretName),
 		VersionStage:    aws.String("AWSCURRENT"),
-		MoveToVersionId: aws.String(versionID),
+		MoveToVersionId: aws.String(token),
 	}
-	if previousVersion != "" {
-		in.RemoveFromVersionId = aws.String(previousVersion)
+	if currentVersion != "" {
+		in.RemoveFromVersionId = aws.String(currentVersion)
 	}
-	if _, err := sm.UpdateSecretVersionStage(ctx, in); err != nil {
+	if _, err := s.client.UpdateSecretVersionStage(ctx, in); err != nil {
 		return fmt.Errorf("promote version to AWSCURRENT: %w", err)
 	}
+	s.logger.Info("version promoted to AWSCURRENT", "version", token)
 	return nil
 }
 
-func RemoveVersionStage(ctx context.Context, sm SecretsManagerClient, secretName, stage, versionID string) error {
+// DiscardPending removes the AWSPENDING stage from the given version.
+func (s *SecretsService[T]) DiscardPending(ctx context.Context, secretName, token string) error {
 	in := &secretsmanager.UpdateSecretVersionStageInput{
 		SecretId:            aws.String(secretName),
-		VersionStage:        aws.String(stage),
-		RemoveFromVersionId: aws.String(versionID),
+		VersionStage:        aws.String("AWSPENDING"),
+		RemoveFromVersionId: aws.String(token),
 	}
-	if _, err := sm.UpdateSecretVersionStage(ctx, in); err != nil {
-		return fmt.Errorf("remove version stage %s from %s: %w", stage, versionID, err)
+	if _, err := s.client.UpdateSecretVersionStage(ctx, in); err != nil {
+		return fmt.Errorf("discard AWSPENDING from version %s: %w", token, err)
 	}
 	return nil
-}
-
-func IsNotFound(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "resourcenotfoundexception") ||
-		strings.Contains(msg, "not found")
 }
