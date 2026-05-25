@@ -4,7 +4,15 @@ import (
 	"context"
 	"log/slog"
 
-	awsclient "github.com/brunojet/go-edge-key-management/internal/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+
+	cdnaws "github.com/brunojet/go-infra-adapters/internal/cdn/aws"
+	secretaws "github.com/brunojet/go-infra-adapters/internal/secret/aws"
+
 	"github.com/brunojet/go-edge-key-management/internal/domain"
 	"github.com/brunojet/go-edge-key-management/internal/rotator"
 )
@@ -28,19 +36,46 @@ func New(ctx context.Context) (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	clients, err := awsclient.NewClients(ctx)
+	logger := slog.Default()
+
+	// Load AWS config
+	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	logger := slog.Default()
 
-	smSvc := awsclient.NewSecretsService[domain.SecretPayload](clients.SecretsManager, logger)
-	if err := smSvc.VerifyConnectivity(ctx, cfg.SecretName); err != nil {
+	// Verify identity
+	stsClient := sts.NewFromConfig(awsCfg)
+	out, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("AWS identity confirmed", "account", aws.ToString(out.Account), "arn", aws.ToString(out.Arn))
+
+	// Create CloudFront client (must be in us-east-1)
+	cfCfg := awsCfg.Copy()
+	cfCfg.Region = "us-east-1"
+	cfClient := cloudfront.NewFromConfig(cfCfg)
+
+	// Create Secrets Manager client
+	smClient := secretsmanager.NewFromConfig(awsCfg)
+
+	// Initialize adapter services
+	smSvc := secretaws.NewSecretsService[domain.SecretPayload](
+		smClient,
+		secretaws.WithLogger[domain.SecretPayload](logger),
+	)
+	if err := smSvc.HealthCheck(ctx, cfg.SecretName); err != nil {
 		return nil, err
 	}
 
-	cfSvc := awsclient.NewCloudFrontService(clients.CloudFront, cfg.MaxKeysInGroup, cfg.CloudFrontConcurrency, logger)
-	if err := cfSvc.VerifyConnectivity(ctx); err != nil {
+	cfSvc := cdnaws.NewCloudFrontDistribution(
+		cfClient,
+		cdnaws.WithMaxKeys(cfg.MaxKeysInGroup),
+		cdnaws.WithConcurrency(cfg.CloudFrontConcurrency),
+		cdnaws.WithLogger(logger),
+	)
+	if err := cfSvc.HealthCheck(ctx); err != nil {
 		return nil, err
 	}
 
