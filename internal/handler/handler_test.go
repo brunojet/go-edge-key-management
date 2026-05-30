@@ -164,3 +164,50 @@ func TestHandle_PropagatesError(t *testing.T) {
 		t.Errorf("got error %v, want %v", err, want)
 	}
 }
+
+func TestNew_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	origLoad := rotatorLoad
+	origSecretAPI := newSecretAPI
+	origSecrets := newSecrets
+	origCdn := newCdn
+	defer func() {
+		rotatorLoad = origLoad
+		newSecretAPI = origSecretAPI
+		newSecrets = origSecrets
+		newCdn = origCdn
+	}()
+
+	rotatorLoad = func() (rotator.Config, error) {
+		return rotator.Config{SecretName: "test", MaxKeysInGroup: 3}, nil
+	}
+
+	newSecretAPI = func(...secretaws.Option) (*secretaws.SecretAPI, error) {
+		return nil, nil
+	}
+
+	newSecrets = func(_ *secretaws.SecretAPI, _ string) secretcontracts.SecretAdapter[domain.SecretPayload] {
+		mockSecret := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+		mockSecret.EXPECT().HealthCheck(gomock.Any()).Return(nil)
+		return mockSecret
+	}
+
+	newCdn = func(...cdnaws.Option) cdncontracts.CdnAdapter {
+		mockCdn := cdnmocks.NewMockCdnAdapter(ctrl)
+		mockCdn.EXPECT().HealthCheck(gomock.Any()).Return(nil)
+		return mockCdn
+	}
+
+	h, err := New(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if h == nil {
+		t.Error("expected handler, got nil")
+	}
+	if h.svc == nil {
+		t.Error("expected handler with service, got nil svc")
+	}
+}
