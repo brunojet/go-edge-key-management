@@ -20,6 +20,7 @@ type mockSecretStore struct {
 	setVersion       func(ctx context.Context, payload *domain.SecretPayload, version string) (string, error)
 	promoteVersion   func(ctx context.Context, version string) error
 	discardVersion   func(ctx context.Context, version string) error
+	healthCheck      func(ctx context.Context) error
 }
 
 func (m *mockSecretStore) Name() string {
@@ -39,6 +40,12 @@ func (m *mockSecretStore) PromoteVersion(ctx context.Context, version string) er
 }
 func (m *mockSecretStore) DiscardVersion(ctx context.Context, version string) error {
 	return m.discardVersion(ctx, version)
+}
+func (m *mockSecretStore) HealthCheck(ctx context.Context) error {
+	if m.healthCheck == nil {
+		return nil
+	}
+	return m.healthCheck(ctx)
 }
 
 type mockKeyDistribution struct {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	cdnaws "github.com/brunojet/go-infra-adapters/pkg/cdn/aws"
-	secretaws "github.com/brunojet/go-infra-adapters/pkg/secret/aws"
+	cdnaws "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/aws"
+	secretaws "github.com/brunojet/go-infra-adapters/v3/pkg/secret/aws"
 
 	"github.com/brunojet/go-edge-key-management/internal/domain"
 	"github.com/brunojet/go-edge-key-management/internal/rotator"
@@ -40,8 +40,8 @@ func New(ctx context.Context) (*Handler, error) {
 		return nil, err
 	}
 	smSvc := secretaws.NewSecrets[domain.SecretPayload](secretAPI, cfg.SecretName)
-	// Verify secret connectivity by attempting to read current version
-	if _, err := smSvc.GetCurrent(ctx); err != nil {
+	// Verify secret exists and credentials are valid (lightweight DescribeSecret check)
+	if err := smSvc.HealthCheck(ctx); err != nil {
 		return nil, err
 	}
 

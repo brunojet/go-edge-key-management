@@ -1,8 +1,8 @@
 package rotator
 
 import (
-	cdncontracts "github.com/brunojet/go-infra-adapters/pkg/cdn/contracts"
-	secretcontracts "github.com/brunojet/go-infra-adapters/pkg/secret/contracts"
+	cdncontracts "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/contracts"
+	secretcontracts "github.com/brunojet/go-infra-adapters/v3/pkg/secret/contracts"
 )
 
 // SecretStore abstracts the secret backend (Secrets Manager, SSM, Vault, etc.).

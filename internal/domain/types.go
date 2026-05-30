@@ -5,7 +5,7 @@ package domain
 import (
 	"time"
 
-	cdncontracts "github.com/brunojet/go-infra-adapters/pkg/cdn/contracts"
+	cdncontracts "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/contracts"
 )
 
 // KeyPair holds a generated RSA key pair and its metadata.
