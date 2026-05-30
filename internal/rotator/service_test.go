@@ -90,6 +90,23 @@ func TestCreateSecret_RotationTooSoon(t *testing.T) {
 	}
 }
 
+func TestCreateSecret_CurrentHasZeroCreatedAt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{CreatedAt: time.Time{}}, nil)
+	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, payload *domain.SecretPayload, token string) (string, error) {
+			return token, nil
+		})
+	cfg := testConfig()
+	cfg.MinRotationIntervalMinutes = 60
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), cfg, discardLogger())
+	if err := svc.Handle(context.Background(), testEvent("createSecret")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCreateSecret_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
