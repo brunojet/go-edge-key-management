@@ -68,9 +68,31 @@ func TestHandle_UnknownStep(t *testing.T) {
 
 func TestCreateSecret_PendingAlreadyExists(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	existingPayload := &domain.SecretPayload{NamePrefix: "test"}
+	existingPayload := &domain.SecretPayload{
+		NamePrefix:  "test",
+		PrivatePEM:  "valid-private",
+		PublicPEM:   "valid-public",
+		Fingerprint: "valid-fingerprint",
+	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(existingPayload, nil)
+	cdnMock := cdnmocks.NewMockCdnAdapter(ctrl)
+	svc := NewRotationService(store, cdnMock, testConfig(), discardLogger())
+	if err := svc.Handle(context.Background(), testEvent("createSecret")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateSecret_PendingIncomplete(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	incompletePayload := &domain.SecretPayload{NamePrefix: "test"}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(incompletePayload, nil)
+	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, payload *domain.SecretPayload, token string) (string, error) {
+			return token, nil
+		})
 	cdnMock := cdnmocks.NewMockCdnAdapter(ctrl)
 	svc := NewRotationService(store, cdnMock, testConfig(), discardLogger())
 	if err := svc.Handle(context.Background(), testEvent("createSecret")); err != nil {

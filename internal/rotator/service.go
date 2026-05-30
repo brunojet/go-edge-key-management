@@ -64,13 +64,14 @@ func (s *RotationService) Handle(ctx context.Context, event RotationEvent) error
 }
 
 // createSecret generates a new RSA key pair and stores it as the AWSPENDING version.
-// No-op when a pending version already exists. Enforces the minimum rotation interval.
+// No-op when a pending version already exists and is valid. Regenerates if incomplete.
+// Enforces the minimum rotation interval.
 func (s *RotationService) createSecret(ctx context.Context, event RotationEvent) error {
 	pending, err := s.getPending(ctx, event)
 	if err != nil {
 		return err
 	}
-	if pending != nil {
+	if pending != nil && pending.IsValid() {
 		s.logger.Info("pending version already present — skipping createSecret", "version", event.ClientRequestToken)
 		return nil
 	}

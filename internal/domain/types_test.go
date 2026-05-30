@@ -58,3 +58,68 @@ func TestSecretPayload(t *testing.T) {
 		t.Errorf("NamePrefix: got %q, want %q", sp.NamePrefix, "test")
 	}
 }
+
+func TestSecretPayload_IsValid(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload *SecretPayload
+		want    bool
+	}{
+		{
+			name:    "nil payload",
+			payload: nil,
+			want:    false,
+		},
+		{
+			name:    "empty payload",
+			payload: &SecretPayload{},
+			want:    false,
+		},
+		{
+			name: "missing private pem",
+			payload: &SecretPayload{
+				PrivatePEM:  "",
+				PublicPEM:   "public",
+				Fingerprint: "fingerprint",
+			},
+			want: false,
+		},
+		{
+			name: "missing public pem",
+			payload: &SecretPayload{
+				PrivatePEM:  "private",
+				PublicPEM:   "",
+				Fingerprint: "fingerprint",
+			},
+			want: false,
+		},
+		{
+			name: "missing fingerprint",
+			payload: &SecretPayload{
+				PrivatePEM:  "private",
+				PublicPEM:   "public",
+				Fingerprint: "",
+			},
+			want: false,
+		},
+		{
+			name: "complete payload",
+			payload: &SecretPayload{
+				PrivatePEM:   "private",
+				PublicPEM:    "public",
+				Fingerprint:  "fingerprint",
+				CreatedAt:    time.Now().UTC(),
+				KeyGroupName: "group",
+				NamePrefix:   "prefix",
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.payload.IsValid(); got != tt.want {
+				t.Errorf("IsValid() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
