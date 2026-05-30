@@ -7,12 +7,12 @@ import (
 
 func TestLoad_Success(t *testing.T) {
 	oldEnv := setEnv(map[string]string{
-		"SECRET_NAME":                    "my-secret",
-		"KEY_GROUP_NAME":                 "my-key-group",
-		"NAME_PREFIX":                    "custom-prefix",
-		"MIN_ROTATION_INTERVAL_MINUTES":  "120",
-		"MAX_KEYS_IN_GROUP":              "5",
-		"CLOUDFRONT_CONCURRENCY":         "10",
+		"SECRET_NAME":                   "my-secret",
+		"KEY_GROUP_NAME":                "my-key-group",
+		"NAME_PREFIX":                   "custom-prefix",
+		"MIN_ROTATION_INTERVAL_MINUTES": "120",
+		"MAX_KEYS_IN_GROUP":             "5",
+		"CLOUDFRONT_CONCURRENCY":        "10",
 	})
 	defer restoreEnv(oldEnv)
 
@@ -99,9 +99,9 @@ func TestLoad_MissingKeyGroupName(t *testing.T) {
 
 func TestLoad_NegativeMinRotationInterval(t *testing.T) {
 	oldEnv := setEnv(map[string]string{
-		"SECRET_NAME":                    "my-secret",
-		"KEY_GROUP_NAME":                 "my-key-group",
-		"MIN_ROTATION_INTERVAL_MINUTES":  "-1",
+		"SECRET_NAME":                   "my-secret",
+		"KEY_GROUP_NAME":                "my-key-group",
+		"MIN_ROTATION_INTERVAL_MINUTES": "-1",
 	})
 	defer restoreEnv(oldEnv)
 
@@ -116,8 +116,8 @@ func TestLoad_NegativeMinRotationInterval(t *testing.T) {
 
 func TestLoad_InvalidMaxKeysInGroup(t *testing.T) {
 	oldEnv := setEnv(map[string]string{
-		"SECRET_NAME":     "my-secret",
-		"KEY_GROUP_NAME":  "my-key-group",
+		"SECRET_NAME":       "my-secret",
+		"KEY_GROUP_NAME":    "my-key-group",
 		"MAX_KEYS_IN_GROUP": "0",
 	})
 	defer restoreEnv(oldEnv)
@@ -133,9 +133,9 @@ func TestLoad_InvalidMaxKeysInGroup(t *testing.T) {
 
 func TestLoad_InvalidCloudFrontConcurrency(t *testing.T) {
 	oldEnv := setEnv(map[string]string{
-		"SECRET_NAME":              "my-secret",
-		"KEY_GROUP_NAME":           "my-key-group",
-		"CLOUDFRONT_CONCURRENCY":   "0",
+		"SECRET_NAME":            "my-secret",
+		"KEY_GROUP_NAME":         "my-key-group",
+		"CLOUDFRONT_CONCURRENCY": "0",
 	})
 	defer restoreEnv(oldEnv)
 
