@@ -7,8 +7,8 @@ import (
 
 // SecretStore abstracts the secret backend (Secrets Manager, SSM, Vault, etc.).
 // Re-exported from adapter for backward compatibility.
-type SecretStore[T any] = secretcontracts.SecretStore[T]
+type SecretStore[T any] = secretcontracts.SecretAdapter[T]
 
 // KeyDistribution abstracts the CDN key distribution layer (CloudFront, Fastly, etc.).
 // Re-exported from adapter for backward compatibility.
-type KeyDistribution = cdncontracts.KeyDistribution
+type KeyDistribution = cdncontracts.CdnAdapter

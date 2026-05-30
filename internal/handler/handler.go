@@ -4,14 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
-
-	cdnaws "github.com/brunojet/go-infra-adapters/internal/cdn/aws"
-	secretaws "github.com/brunojet/go-infra-adapters/internal/secret/aws"
+	cdnaws "github.com/brunojet/go-infra-adapters/pkg/cdn/aws"
+	secretaws "github.com/brunojet/go-infra-adapters/pkg/secret/aws"
 
 	"github.com/brunojet/go-edge-key-management/internal/domain"
 	"github.com/brunojet/go-edge-key-management/internal/rotator"
@@ -29,7 +23,7 @@ type Handler struct {
 	svc rotationSvc
 }
 
-// New initialises AWS clients, verifies connectivity to both AWS services,
+// New initialises adapters, verifies connectivity to both AWS services,
 // builds the service graph, and returns a Handler.
 func New(ctx context.Context) (*Handler, error) {
 	cfg, err := rotator.Load()
@@ -38,39 +32,20 @@ func New(ctx context.Context) (*Handler, error) {
 	}
 	logger := slog.Default()
 
-	// Load AWS config
-	awsCfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Verify identity
-	stsClient := sts.NewFromConfig(awsCfg)
-	out, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-	if err != nil {
-		return nil, err
-	}
-	logger.Info("AWS identity confirmed", "account", aws.ToString(out.Account), "arn", aws.ToString(out.Arn))
-
-	// Create CloudFront client (must be in us-east-1)
-	cfCfg := awsCfg.Copy()
-	cfCfg.Region = "us-east-1"
-	cfClient := cloudfront.NewFromConfig(cfCfg)
-
-	// Create Secrets Manager client
-	smClient := secretsmanager.NewFromConfig(awsCfg)
-
-	// Initialize adapter services
-	smSvc := secretaws.NewSecretsService[domain.SecretPayload](
-		smClient,
-		secretaws.WithLogger[domain.SecretPayload](logger),
+	// Initialize adapter services (adapters create AWS clients automatically)
+	secretAPI, err := secretaws.NewSecretAPI(
+		secretaws.WithLogger(logger),
 	)
-	if err := smSvc.HealthCheck(ctx, cfg.SecretName); err != nil {
+	if err != nil {
+		return nil, err
+	}
+	smSvc := secretaws.NewSecrets[domain.SecretPayload](secretAPI, cfg.SecretName)
+	// Verify secret connectivity by attempting to read current version
+	if _, err := smSvc.GetCurrent(ctx); err != nil {
 		return nil, err
 	}
 
-	cfSvc := cdnaws.NewCloudFrontDistribution(
-		cfClient,
+	cfSvc := cdnaws.NewCdn(
 		cdnaws.WithMaxKeys(cfg.MaxKeysInGroup),
 		cdnaws.WithConcurrency(cfg.CloudFrontConcurrency),
 		cdnaws.WithLogger(logger),

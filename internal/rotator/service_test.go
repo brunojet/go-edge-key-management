@@ -14,33 +14,38 @@ import (
 // --- mocks ---
 
 type mockSecretStore struct {
-	getCurrent     func(ctx context.Context, secretName string) (*domain.SecretPayload, error)
-	setPending     func(ctx context.Context, secretName string, payload *domain.SecretPayload, token string) error
-	getPending     func(ctx context.Context, secretName, token string) (*domain.SecretPayload, error)
-	promotePending func(ctx context.Context, secretName, token string) error
-	discardPending func(ctx context.Context, secretName, token string) error
+	name             string
+	getCurrent       func(ctx context.Context) (*domain.SecretPayload, error)
+	getVersion       func(ctx context.Context, version string) (*domain.SecretPayload, error)
+	setVersion       func(ctx context.Context, payload *domain.SecretPayload, version string) (string, error)
+	promoteVersion   func(ctx context.Context, version string) error
+	discardVersion   func(ctx context.Context, version string) error
 }
 
-func (m *mockSecretStore) GetCurrent(ctx context.Context, secretName string) (*domain.SecretPayload, error) {
-	return m.getCurrent(ctx, secretName)
+func (m *mockSecretStore) Name() string {
+	return m.name
 }
-func (m *mockSecretStore) SetPending(ctx context.Context, secretName string, payload *domain.SecretPayload, token string) error {
-	return m.setPending(ctx, secretName, payload, token)
+func (m *mockSecretStore) GetCurrent(ctx context.Context) (*domain.SecretPayload, error) {
+	return m.getCurrent(ctx)
 }
-func (m *mockSecretStore) GetPending(ctx context.Context, secretName, token string) (*domain.SecretPayload, error) {
-	return m.getPending(ctx, secretName, token)
+func (m *mockSecretStore) GetVersion(ctx context.Context, version string) (*domain.SecretPayload, error) {
+	return m.getVersion(ctx, version)
 }
-func (m *mockSecretStore) PromotePending(ctx context.Context, secretName, token string) error {
-	return m.promotePending(ctx, secretName, token)
+func (m *mockSecretStore) SetVersion(ctx context.Context, payload *domain.SecretPayload, version string) (string, error) {
+	return m.setVersion(ctx, payload, version)
 }
-func (m *mockSecretStore) DiscardPending(ctx context.Context, secretName, token string) error {
-	return m.discardPending(ctx, secretName, token)
+func (m *mockSecretStore) PromoteVersion(ctx context.Context, version string) error {
+	return m.promoteVersion(ctx, version)
+}
+func (m *mockSecretStore) DiscardVersion(ctx context.Context, version string) error {
+	return m.discardVersion(ctx, version)
 }
 
 type mockKeyDistribution struct {
 	createPublicKey  func(ctx context.Context, key domain.CdnKey) (string, error)
 	ensureKeyGroup   func(ctx context.Context, name, keyID string) (string, error)
 	verifyKeyInGroup func(ctx context.Context, key domain.CdnKey) (bool, error)
+	healthCheck      func(ctx context.Context) error
 }
 
 func (m *mockKeyDistribution) CreatePublicKey(ctx context.Context, key domain.CdnKey) (string, error) {
@@ -51,6 +56,12 @@ func (m *mockKeyDistribution) EnsureKeyGroup(ctx context.Context, name, keyID st
 }
 func (m *mockKeyDistribution) VerifyKeyInGroup(ctx context.Context, key domain.CdnKey) (bool, error) {
 	return m.verifyKeyInGroup(ctx, key)
+}
+func (m *mockKeyDistribution) HealthCheck(ctx context.Context) error {
+	if m.healthCheck == nil {
+		return nil
+	}
+	return m.healthCheck(ctx)
 }
 
 // --- helpers ---
@@ -100,7 +111,7 @@ func TestHandle_UnknownStep(t *testing.T) {
 func TestCreateSecret_PendingAlreadyExists(t *testing.T) {
 	existingPayload := &domain.SecretPayload{NamePrefix: "test"}
 	store := &mockSecretStore{
-		getPending: func(_ context.Context, _, _ string) (*domain.SecretPayload, error) {
+		getVersion: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
 			return existingPayload, nil
 		},
 	}
@@ -112,10 +123,10 @@ func TestCreateSecret_PendingAlreadyExists(t *testing.T) {
 
 func TestCreateSecret_RotationTooSoon(t *testing.T) {
 	store := &mockSecretStore{
-		getPending: func(_ context.Context, _, _ string) (*domain.SecretPayload, error) {
+		getVersion: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
 			return nil, nil // no pending
 		},
-		getCurrent: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
+		getCurrent: func(_ context.Context) (*domain.SecretPayload, error) {
 			return &domain.SecretPayload{CreatedAt: time.Now()}, nil
 		},
 	}
@@ -131,15 +142,15 @@ func TestCreateSecret_RotationTooSoon(t *testing.T) {
 func TestCreateSecret_Success(t *testing.T) {
 	var storedToken string
 	store := &mockSecretStore{
-		getPending: func(_ context.Context, _, _ string) (*domain.SecretPayload, error) {
+		getVersion: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
 			return nil, nil
 		},
-		getCurrent: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
+		getCurrent: func(_ context.Context) (*domain.SecretPayload, error) {
 			return &domain.SecretPayload{}, nil
 		},
-		setPending: func(_ context.Context, _ string, _ *domain.SecretPayload, token string) error {
+		setVersion: func(_ context.Context, _ *domain.SecretPayload, token string) (string, error) {
 			storedToken = token
-			return nil
+			return token, nil
 		},
 	}
 	svc := NewRotationService(store, &mockKeyDistribution{}, testConfig(), discardLogger())
@@ -156,7 +167,7 @@ func TestCreateSecret_Success(t *testing.T) {
 
 func TestSetSecret_PendingNotFound(t *testing.T) {
 	store := &mockSecretStore{
-		getPending: func(_ context.Context, _, _ string) (*domain.SecretPayload, error) {
+		getVersion: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
 			return nil, nil
 		},
 	}
@@ -170,7 +181,7 @@ func TestSetSecret_PendingNotFound(t *testing.T) {
 func TestSetSecret_Success(t *testing.T) {
 	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
 	store := &mockSecretStore{
-		getPending: func(_ context.Context, _, _ string) (*domain.SecretPayload, error) {
+		getVersion: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
 			return pending, nil
 		},
 	}
@@ -193,7 +204,7 @@ func TestSetSecret_Success(t *testing.T) {
 func TestTestSecret_KeyNotInGroup(t *testing.T) {
 	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
 	store := &mockSecretStore{
-		getPending: func(_ context.Context, _, _ string) (*domain.SecretPayload, error) {
+		getVersion: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
 			return pending, nil
 		},
 	}
@@ -212,7 +223,7 @@ func TestTestSecret_KeyNotInGroup(t *testing.T) {
 func TestTestSecret_Success(t *testing.T) {
 	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
 	store := &mockSecretStore{
-		getPending: func(_ context.Context, _, _ string) (*domain.SecretPayload, error) {
+		getVersion: func(_ context.Context, _ string) (*domain.SecretPayload, error) {
 			return pending, nil
 		},
 	}
@@ -232,7 +243,7 @@ func TestTestSecret_Success(t *testing.T) {
 func TestFinishSecret_Success(t *testing.T) {
 	var promotedToken string
 	store := &mockSecretStore{
-		promotePending: func(_ context.Context, _ string, token string) error {
+		promoteVersion: func(_ context.Context, token string) error {
 			promotedToken = token
 			return nil
 		},
@@ -249,13 +260,13 @@ func TestFinishSecret_Success(t *testing.T) {
 
 func TestFinishSecret_PromoteError(t *testing.T) {
 	store := &mockSecretStore{
-		promotePending: func(_ context.Context, _, _ string) error {
+		promoteVersion: func(_ context.Context, _ string) error {
 			return errors.New("promote failed")
 		},
 	}
 	svc := NewRotationService(store, &mockKeyDistribution{}, testConfig(), discardLogger())
 	if err := svc.Handle(context.Background(), testEvent("finishSecret")); err == nil {
-		t.Fatal("expected error from PromotePending")
+		t.Fatal("expected error from PromoteVersion")
 	}
 }
 

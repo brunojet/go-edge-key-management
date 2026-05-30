@@ -73,7 +73,7 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 	}
 
 	minInterval := time.Duration(s.cfg.MinRotationIntervalMinutes) * time.Minute
-	if _, err := s.getCurrentWithIntervalCheck(ctx, event.SecretId, minInterval); err != nil {
+	if _, err := s.getCurrentWithIntervalCheck(ctx, minInterval); err != nil {
 		return err
 	}
 
@@ -89,7 +89,7 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 		KeyGroupName: s.cfg.KeyGroupName,
 		NamePrefix:   s.cfg.NamePrefix,
 	}
-	if err := s.secrets.SetPending(ctx, event.SecretId, payload, event.ClientRequestToken); err != nil {
+	if _, err := s.secrets.SetVersion(ctx, payload, event.ClientRequestToken); err != nil {
 		return fmt.Errorf("store pending secret: %w", err)
 	}
 	s.logger.Info("createSecret: pending version written", "version", event.ClientRequestToken)
@@ -150,7 +150,7 @@ func (s *RotationService) testSecret(ctx context.Context, event RotationEvent) e
 // finishSecret promotes the pending version to AWSCURRENT.
 // Idempotent: safe to retry with the same token.
 func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent) error {
-	if err := s.secrets.PromotePending(ctx, event.SecretId, event.ClientRequestToken); err != nil {
+	if err := s.secrets.PromoteVersion(ctx, event.ClientRequestToken); err != nil {
 		return fmt.Errorf("finish secret: %w", err)
 	}
 	s.logger.Info("finishSecret: version promoted", "version", event.ClientRequestToken)
