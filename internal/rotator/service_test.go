@@ -69,10 +69,12 @@ func TestHandle_UnknownStep(t *testing.T) {
 func TestCreateSecret_PendingAlreadyExists(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	existingPayload := &domain.SecretPayload{
-		NamePrefix:  "test",
-		PrivatePEM:  "valid-private",
-		PublicPEM:   "valid-public",
-		Fingerprint: "valid-fingerprint",
+		PrivatePEM:   "valid-private",
+		PublicPEM:    "valid-public",
+		Fingerprint:  "valid-fingerprint",
+		CreatedAt:    time.Now().UTC(),
+		KeyGroupName: "test-group",
+		NamePrefix:   "test",
 	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(existingPayload, nil)

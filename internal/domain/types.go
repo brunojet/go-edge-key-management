@@ -29,8 +29,14 @@ type SecretPayload struct {
 // CdnKey re-exports the adapter type for backward compatibility.
 type CdnKey = cdncontracts.CdnKey
 
-// IsValid checks if the SecretPayload contains a complete key pair.
-// Returns false if PEM fields are empty (incomplete rotation).
+// IsValid checks if the SecretPayload contains all required fields.
+// Returns false if any field is empty or zero-valued.
 func (p *SecretPayload) IsValid() bool {
-	return p != nil && p.PrivatePEM != "" && p.PublicPEM != "" && p.Fingerprint != ""
+	return p != nil &&
+		p.PrivatePEM != "" &&
+		p.PublicPEM != "" &&
+		p.Fingerprint != "" &&
+		!p.CreatedAt.IsZero() &&
+		p.KeyGroupName != "" &&
+		p.NamePrefix != ""
 }

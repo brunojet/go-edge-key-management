@@ -60,6 +60,7 @@ func TestSecretPayload(t *testing.T) {
 }
 
 func TestSecretPayload_IsValid(t *testing.T) {
+	now := time.Now().UTC()
 	tests := []struct {
 		name    string
 		payload *SecretPayload
@@ -78,27 +79,72 @@ func TestSecretPayload_IsValid(t *testing.T) {
 		{
 			name: "missing private pem",
 			payload: &SecretPayload{
-				PrivatePEM:  "",
-				PublicPEM:   "public",
-				Fingerprint: "fingerprint",
+				PrivatePEM:   "",
+				PublicPEM:    "public",
+				Fingerprint:  "fingerprint",
+				CreatedAt:    now,
+				KeyGroupName: "group",
+				NamePrefix:   "prefix",
 			},
 			want: false,
 		},
 		{
 			name: "missing public pem",
 			payload: &SecretPayload{
-				PrivatePEM:  "private",
-				PublicPEM:   "",
-				Fingerprint: "fingerprint",
+				PrivatePEM:   "private",
+				PublicPEM:    "",
+				Fingerprint:  "fingerprint",
+				CreatedAt:    now,
+				KeyGroupName: "group",
+				NamePrefix:   "prefix",
 			},
 			want: false,
 		},
 		{
 			name: "missing fingerprint",
 			payload: &SecretPayload{
-				PrivatePEM:  "private",
-				PublicPEM:   "public",
-				Fingerprint: "",
+				PrivatePEM:   "private",
+				PublicPEM:    "public",
+				Fingerprint:  "",
+				CreatedAt:    now,
+				KeyGroupName: "group",
+				NamePrefix:   "prefix",
+			},
+			want: false,
+		},
+		{
+			name: "missing created at",
+			payload: &SecretPayload{
+				PrivatePEM:   "private",
+				PublicPEM:    "public",
+				Fingerprint:  "fingerprint",
+				CreatedAt:    time.Time{},
+				KeyGroupName: "group",
+				NamePrefix:   "prefix",
+			},
+			want: false,
+		},
+		{
+			name: "missing key group name",
+			payload: &SecretPayload{
+				PrivatePEM:   "private",
+				PublicPEM:    "public",
+				Fingerprint:  "fingerprint",
+				CreatedAt:    now,
+				KeyGroupName: "",
+				NamePrefix:   "prefix",
+			},
+			want: false,
+		},
+		{
+			name: "missing name prefix",
+			payload: &SecretPayload{
+				PrivatePEM:   "private",
+				PublicPEM:    "public",
+				Fingerprint:  "fingerprint",
+				CreatedAt:    now,
+				KeyGroupName: "group",
+				NamePrefix:   "",
 			},
 			want: false,
 		},
@@ -108,7 +154,7 @@ func TestSecretPayload_IsValid(t *testing.T) {
 				PrivatePEM:   "private",
 				PublicPEM:    "public",
 				Fingerprint:  "fingerprint",
-				CreatedAt:    time.Now().UTC(),
+				CreatedAt:    now,
 				KeyGroupName: "group",
 				NamePrefix:   "prefix",
 			},
