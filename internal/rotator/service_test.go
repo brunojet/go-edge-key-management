@@ -185,6 +185,124 @@ func TestFinishSecret_PromoteError(t *testing.T) {
 	}
 }
 
+// --- createSecret errors ---
+
+func TestCreateSecret_GetVersionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("get failed"))
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("createSecret"))
+	if err == nil {
+		t.Fatal("expected error from GetVersion")
+	}
+}
+
+func TestCreateSecret_GetCurrentError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	store.EXPECT().GetCurrent(gomock.Any()).Return(nil, errors.New("get current failed"))
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("createSecret"))
+	if err == nil {
+		t.Fatal("expected error from GetCurrent")
+	}
+}
+
+func TestCreateSecret_SetVersionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).Return("", errors.New("set failed"))
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("createSecret"))
+	if err == nil {
+		t.Fatal("expected error from SetVersion")
+	}
+}
+
+// --- setSecret errors ---
+
+func TestSetSecret_GetVersionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("get failed"))
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("setSecret"))
+	if err == nil {
+		t.Fatal("expected error from GetVersion")
+	}
+}
+
+func TestSetSecret_CreatePublicKeyError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("", errors.New("create key failed"))
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("setSecret"))
+	if err == nil {
+		t.Fatal("expected error from CreatePublicKey")
+	}
+}
+
+func TestSetSecret_EnsureKeyGroupError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
+	cf.EXPECT().EnsureKeyGroup(gomock.Any(), gomock.Any(), gomock.Any()).Return("", errors.New("ensure group failed"))
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("setSecret"))
+	if err == nil {
+		t.Fatal("expected error from EnsureKeyGroup")
+	}
+}
+
+// --- testSecret errors ---
+
+func TestTestSecret_GetVersionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("get failed"))
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("testSecret"))
+	if err == nil {
+		t.Fatal("expected error from GetVersion")
+	}
+}
+
+func TestTestSecret_PendingNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("testSecret"))
+	if err == nil {
+		t.Fatal("expected error when pending not found")
+	}
+}
+
+func TestTestSecret_VerifyKeyError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().VerifyKeyInGroup(gomock.Any(), gomock.Any()).Return(false, errors.New("verify failed"))
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("testSecret"))
+	if err == nil {
+		t.Fatal("expected error from VerifyKeyInGroup")
+	}
+}
+
 // --- validateEvent ---
 
 func TestValidateEvent(t *testing.T) {
@@ -193,5 +311,26 @@ func TestValidateEvent(t *testing.T) {
 	}
 	if err := validateEvent(RotationEvent{Step: "createSecret"}); err == nil {
 		t.Error("expected error for missing token")
+	}
+}
+
+// --- cdnKeyName ---
+
+func TestCdnKeyName(t *testing.T) {
+	tests := []struct {
+		prefix      string
+		fingerprint string
+		want        string
+	}{
+		{"test", "abc12345def67890", "test-abc12345"},
+		{"prod", "xyz", "prod-xyz"},
+		{"short", "a", "short-a"},
+		{"long", "0123456789abcdef", "long-01234567"},
+	}
+	for _, tt := range tests {
+		got := cdnKeyName(tt.prefix, tt.fingerprint)
+		if got != tt.want {
+			t.Errorf("cdnKeyName(%q, %q) = %q, want %q", tt.prefix, tt.fingerprint, got, tt.want)
+		}
 	}
 }
