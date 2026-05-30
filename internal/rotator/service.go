@@ -10,6 +10,9 @@ import (
 	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto"
 )
 
+// Injectable for testing.
+var newRSAKeyGenerator = crypto.NewRSAKeyGenerator
+
 // rsaKeyBits is the RSA key size used when generating new key pairs.
 // CloudFront public keys support only 2048-bit RSA as of this writing.
 const rsaKeyBits = 2048
@@ -75,7 +78,7 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 	if _, err := s.getCurrentWithIntervalCheck(ctx, minInterval); err != nil {
 		return err
 	}
-	kp, err := crypto.NewRSAKeyGenerator(rsaKeyBits).Generate(ctx)
+	kp, err := newRSAKeyGenerator(rsaKeyBits).Generate(ctx)
 	if err != nil {
 		return fmt.Errorf("generate key pair: %w", err)
 	}

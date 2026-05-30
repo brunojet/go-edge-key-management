@@ -10,6 +10,8 @@ import (
 
 	"github.com/brunojet/go-edge-key-management/internal/domain"
 	cdnmocks "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/mocks"
+	cryptocontracts "github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
+	cryptomocks "github.com/brunojet/go-infra-adapters/v3/pkg/crypto/mocks"
 	secretmocks "github.com/brunojet/go-infra-adapters/v3/pkg/secret/mocks"
 	"github.com/golang/mock/gomock"
 )
@@ -224,6 +226,27 @@ func TestCreateSecret_GetCurrentError(t *testing.T) {
 	err := svc.Handle(context.Background(), testEvent("createSecret"))
 	if err == nil {
 		t.Fatal("expected error from GetCurrent")
+	}
+}
+
+func TestCreateSecret_GenerateKeyError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	origNewRSAKeyGenerator := newRSAKeyGenerator
+	defer func() { newRSAKeyGenerator = origNewRSAKeyGenerator }()
+
+	mockKeyGen := cryptomocks.NewMockKeyGenerator(ctrl)
+	mockKeyGen.EXPECT().Generate(gomock.Any()).Return(nil, errors.New("generate failed"))
+	newRSAKeyGenerator = func(_ int) cryptocontracts.KeyGenerator {
+		return mockKeyGen
+	}
+
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("createSecret"))
+	if err == nil {
+		t.Fatal("expected error from Generate")
 	}
 }
 
