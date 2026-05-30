@@ -23,29 +23,36 @@ type Handler struct {
 	svc rotationSvc
 }
 
+// Injectable for testing.
+var (
+	rotatorLoad  = rotator.Load
+	newSecretAPI = secretaws.NewSecretAPI
+	newSecrets   = secretaws.NewSecrets[domain.SecretPayload]
+	newCdn       = cdnaws.NewCdn
+)
+
 // New initialises adapters, verifies connectivity to both AWS services,
 // builds the service graph, and returns a Handler.
 func New(ctx context.Context) (*Handler, error) {
-	cfg, err := rotator.Load()
+	cfg, err := rotatorLoad()
 	if err != nil {
 		return nil, err
 	}
 	logger := slog.Default()
-
 	// Initialize adapter services (adapters create AWS clients automatically)
-	secretAPI, err := secretaws.NewSecretAPI(
+	secretAPI, err := newSecretAPI(
 		secretaws.WithLogger(logger),
 	)
 	if err != nil {
 		return nil, err
 	}
-	smSvc := secretaws.NewSecrets[domain.SecretPayload](secretAPI, cfg.SecretName)
+	smSvc := newSecrets(secretAPI, cfg.SecretName)
 	// Verify secret exists and credentials are valid (lightweight DescribeSecret check)
 	if err := smSvc.HealthCheck(ctx); err != nil {
 		return nil, err
 	}
 
-	cfSvc := cdnaws.NewCdn(
+	cfSvc := newCdn(
 		cdnaws.WithMaxKeys(cfg.MaxKeysInGroup),
 		cdnaws.WithConcurrency(cfg.CloudFrontConcurrency),
 		cdnaws.WithLogger(logger),
@@ -53,7 +60,6 @@ func New(ctx context.Context) (*Handler, error) {
 	if err := cfSvc.HealthCheck(ctx); err != nil {
 		return nil, err
 	}
-
 	svc := rotator.NewRotationService(smSvc, cfSvc, cfg, logger)
 	return &Handler{svc: svc}, nil
 }

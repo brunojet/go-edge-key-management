@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "fmt",
+      "type": "shell",
+      "command": "go fmt ./...",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "lint",
+      "type": "shell",
+      "command": "golangci-lint run ./...",
+      "group": "build",
+      "dependsOn": "fmt",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "coverage",
+      "type": "shell",
+      "command": "bash ./scripts/coverage.sh",
+      "group": "test",
+      "dependsOn": "fmt",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "coverage-html",
+      "type": "shell",
+      "command": "go tool cover \"-html=coverage/coverage.out\" -o \"coverage/coverage.html\"",
+      "group": "test",
+      "dependsOn": "coverage",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

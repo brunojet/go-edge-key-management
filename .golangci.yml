@@ -1,0 +1,83 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - misspell
+    - gocritic
+    - revive
+    - dupl
+    - exhaustive
+    - noctx
+    - bodyclose
+    - gosec
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - gocritic
+          - noctx
+      - path: _test\.go
+        text: "unused-parameter"
+        linters:
+          - revive
+      - path: "internal/"
+        text: "package-comments|exported:|comment on exported"
+        linters:
+          - revive
+      - text: "var-naming|unexported-return"
+        linters:
+          - revive
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - commentedOutCode
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+        - name: error-return
+        - name: error-strings
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    dupl:
+      threshold: 150
+    exhaustive:
+      default-signifies-exhaustive: true
+    misspell:
+      locale: US
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/brunojet/go-edge-key-management
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+

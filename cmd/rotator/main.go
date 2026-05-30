@@ -11,8 +11,11 @@ import (
 	"github.com/brunojet/go-edge-key-management/internal/handler"
 )
 
+// handlerNew is injectable for testing.
+var handlerNew = handler.New
+
 func main() {
-	h, err := handler.New(context.Background())
+	h, err := handlerNew(context.Background())
 	if err != nil {
 		log.Fatalf("init: %v", err)
 	}

@@ -5,8 +5,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -79,52 +77,4 @@ func main() {
 	if err := h.Handle(context.Background(), evt); err != nil {
 		log.Fatalf("Handle error: %v", err)
 	}
-}
-
-func secureToken(seed string) string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("%s-%d", seed, time.Now().UnixNano())
-	}
-	h := hex.EncodeToString(b)
-	if seed != "" {
-		return fmt.Sprintf("%s-%s", seed, h)
-	}
-	return h
-}
-
-// flagStr / flagBool / flagInt are minimal flag parsers so that debug_main.go
-// does not pull in the "flag" package at all in the non-debug build.
-func flagStr(name, def string) *string {
-	v := def
-	for i, arg := range os.Args[1:] {
-		if arg == "--"+name || arg == "-"+name {
-			if i+1 < len(os.Args[1:]) {
-				v = os.Args[i+2]
-			}
-		}
-	}
-	return &v
-}
-
-func flagBool(name string, def bool) *bool {
-	v := def
-	for _, arg := range os.Args[1:] {
-		if arg == "--"+name || arg == "-"+name {
-			v = true
-		}
-	}
-	return &v
-}
-
-func flagInt(name string, def int) *int {
-	v := def
-	for i, arg := range os.Args[1:] {
-		if arg == "--"+name || arg == "-"+name {
-			if i+1 < len(os.Args[1:]) {
-				fmt.Sscanf(os.Args[i+2], "%d", &v)
-			}
-		}
-	}
-	return &v
 }

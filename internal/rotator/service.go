@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/brunojet/go-edge-key-management/internal/domain"
-	"github.com/brunojet/go-edge-key-management/internal/keys"
+	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto"
 )
 
 // rsaKeyBits is the RSA key size used when generating new key pairs.
@@ -71,21 +71,19 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 		s.logger.Info("pending version already present — skipping createSecret", "version", event.ClientRequestToken)
 		return nil
 	}
-
 	minInterval := time.Duration(s.cfg.MinRotationIntervalMinutes) * time.Minute
 	if _, err := s.getCurrentWithIntervalCheck(ctx, minInterval); err != nil {
 		return err
 	}
-
-	kp, err := keys.GenerateRSAKeyPair(rsaKeyBits)
+	kp, err := crypto.NewRSAKeyGenerator(rsaKeyBits).Generate(ctx)
 	if err != nil {
 		return fmt.Errorf("generate key pair: %w", err)
 	}
 	payload := &domain.SecretPayload{
-		PrivatePEM:   kp.PrivatePEM,
-		PublicPEM:    kp.PublicPEM,
+		PrivatePEM:   string(kp.PrivatePEM),
+		PublicPEM:    string(kp.PublicPEM),
 		Fingerprint:  kp.Fingerprint,
-		CreatedAt:    kp.CreatedAt,
+		CreatedAt:    time.Now().UTC(),
 		KeyGroupName: s.cfg.KeyGroupName,
 		NamePrefix:   s.cfg.NamePrefix,
 	}
@@ -105,7 +103,6 @@ func (s *RotationService) setSecret(ctx context.Context, event RotationEvent) er
 	if pending == nil {
 		return fmt.Errorf("setSecret: pending version %s not found", event.ClientRequestToken)
 	}
-
 	key := domain.CdnKey{
 		Name:      cdnKeyName(s.cfg.NamePrefix, pending.Fingerprint),
 		PEM:       pending.PublicPEM,
@@ -131,7 +128,6 @@ func (s *RotationService) testSecret(ctx context.Context, event RotationEvent) e
 	if pending == nil {
 		return fmt.Errorf("testSecret: pending version %s not found", event.ClientRequestToken)
 	}
-
 	key := domain.CdnKey{
 		Name:      cdnKeyName(s.cfg.NamePrefix, pending.Fingerprint),
 		GroupName: s.cfg.KeyGroupName,
