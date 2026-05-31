@@ -30,3 +30,12 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+bin/
+vendor/
+*.pem
+*.key
+.env
+tmp-output/
+**/.terraform/**
+.terraform.*
+**/build/**
