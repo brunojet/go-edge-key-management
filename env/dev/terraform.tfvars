@@ -16,7 +16,7 @@ key_group_name = ""
 initial_public_key_ids = []
 
 # Lambda runtime resource sizing
-lambda_memory_size = 256
+lambda_memory_size = 128
 lambda_timeout = 15
 
 # Key retention settings for the rotator
