@@ -1,3 +1,4 @@
+// Package main implements the AWS Lambda handler for secret rotation.
 package main
 
 import (

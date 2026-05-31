@@ -205,7 +205,7 @@ func TestNew_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if h == nil {
-		t.Error("expected handler, got nil")
+		t.Fatal("expected handler, got nil")
 	}
 	if h.svc == nil {
 		t.Error("expected handler with service, got nil svc")

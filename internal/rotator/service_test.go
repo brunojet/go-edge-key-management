@@ -32,7 +32,7 @@ func testConfig() Config {
 	}
 }
 
-func testEvent(step string) RotationEvent {
+func testEvent(step string) RotationEvent { //nolint:gosec
 	return RotationEvent{
 		Step:               step,
 		SecretId:           "arn:aws:secretsmanager:us-east-1:123:secret:test",

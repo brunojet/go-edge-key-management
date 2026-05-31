@@ -152,8 +152,8 @@ func TestEnvOrDefaultInt_WithValue(t *testing.T) {
 	oldEnv := map[string]string{
 		"TEST_INT": os.Getenv("TEST_INT"),
 	}
-	os.Setenv("TEST_INT", "42")
-	defer os.Setenv("TEST_INT", oldEnv["TEST_INT"])
+	_ = os.Setenv("TEST_INT", "42")
+	defer func() { _ = os.Setenv("TEST_INT", oldEnv["TEST_INT"]) }()
 
 	got := envOrDefaultInt("TEST_INT", 10)
 	if got != 42 {
@@ -165,10 +165,10 @@ func TestEnvOrDefaultInt_WithDefault(t *testing.T) {
 	oldEnv := map[string]string{
 		"TEST_INT_NONEXIST": os.Getenv("TEST_INT_NONEXIST"),
 	}
-	os.Unsetenv("TEST_INT_NONEXIST")
+	_ = os.Unsetenv("TEST_INT_NONEXIST")
 	defer func() {
 		if oldEnv["TEST_INT_NONEXIST"] != "" {
-			os.Setenv("TEST_INT_NONEXIST", oldEnv["TEST_INT_NONEXIST"])
+			_ = os.Setenv("TEST_INT_NONEXIST", oldEnv["TEST_INT_NONEXIST"])
 		}
 	}()
 
@@ -182,8 +182,8 @@ func TestEnvOrDefaultInt_InvalidValue(t *testing.T) {
 	oldEnv := map[string]string{
 		"TEST_INT_INVALID": os.Getenv("TEST_INT_INVALID"),
 	}
-	os.Setenv("TEST_INT_INVALID", "not-a-number")
-	defer os.Setenv("TEST_INT_INVALID", oldEnv["TEST_INT_INVALID"])
+	_ = os.Setenv("TEST_INT_INVALID", "not-a-number")
+	defer func() { _ = os.Setenv("TEST_INT_INVALID", oldEnv["TEST_INT_INVALID"]) }()
 
 	got := envOrDefaultInt("TEST_INT_INVALID", 10)
 	if got != 10 {
@@ -195,8 +195,8 @@ func TestEnvOrDefault_WithValue(t *testing.T) {
 	oldEnv := map[string]string{
 		"TEST_STR": os.Getenv("TEST_STR"),
 	}
-	os.Setenv("TEST_STR", "value")
-	defer os.Setenv("TEST_STR", oldEnv["TEST_STR"])
+	_ = os.Setenv("TEST_STR", "value")
+	defer func() { _ = os.Setenv("TEST_STR", oldEnv["TEST_STR"]) }()
 
 	got := envOrDefault("TEST_STR", "default")
 	if got != "value" {
@@ -208,10 +208,10 @@ func TestEnvOrDefault_WithDefault(t *testing.T) {
 	oldEnv := map[string]string{
 		"TEST_STR_NONEXIST": os.Getenv("TEST_STR_NONEXIST"),
 	}
-	os.Unsetenv("TEST_STR_NONEXIST")
+	_ = os.Unsetenv("TEST_STR_NONEXIST")
 	defer func() {
 		if oldEnv["TEST_STR_NONEXIST"] != "" {
-			os.Setenv("TEST_STR_NONEXIST", oldEnv["TEST_STR_NONEXIST"])
+			_ = os.Setenv("TEST_STR_NONEXIST", oldEnv["TEST_STR_NONEXIST"])
 		}
 	}()
 
@@ -226,21 +226,21 @@ func setEnv(vars map[string]string) map[string]string {
 	old := make(map[string]string)
 	for key := range vars {
 		old[key] = os.Getenv(key)
-		os.Unsetenv(key)
+		_ = os.Unsetenv(key)
 	}
 	for key, val := range vars {
-		os.Setenv(key, val)
+		_ = os.Setenv(key, val)
 	}
 	return old
 }
 
 func restoreEnv(old map[string]string) {
 	for key := range old {
-		os.Unsetenv(key)
+		_ = os.Unsetenv(key)
 	}
 	for key, val := range old {
 		if val != "" {
-			os.Setenv(key, val)
+			_ = os.Setenv(key, val)
 		}
 	}
 }

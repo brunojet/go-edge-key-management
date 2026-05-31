@@ -31,7 +31,7 @@ var (
 	newCdn       = cdnaws.NewCdn
 )
 
-// New initialises adapters, verifies connectivity to both AWS services,
+// New initializes adapters, verifies connectivity to both AWS services,
 // builds the service graph, and returns a Handler.
 func New(ctx context.Context) (*Handler, error) {
 	cfg, err := rotatorLoad()
