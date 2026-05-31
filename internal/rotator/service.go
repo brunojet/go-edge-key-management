@@ -66,14 +66,14 @@ func (s *RotationService) Handle(ctx context.Context, event RotationEvent) error
 // createSecret generates a new RSA key pair and stores it as the AWSPENDING version.
 // No-op when a pending version already exists and is valid. Regenerates if incomplete.
 // Enforces the minimum rotation interval.
+// Detects stale/stuck AWSPENDING and aborts rapid retries to prevent loops.
 func (s *RotationService) createSecret(ctx context.Context, event RotationEvent) error {
 	pending, err := s.getPending(ctx, event)
 	if err != nil {
 		return err
 	}
-	if pending != nil && pending.IsValid() {
-		s.logger.Info("pending version already present — skipping createSecret", "version", event.ClientRequestToken)
-		return nil
+	if pending != nil {
+		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
 	}
 	minInterval := time.Duration(s.cfg.MinRotationIntervalMinutes) * time.Minute
 	if _, err := s.getCurrentWithIntervalCheck(ctx, minInterval); err != nil {
@@ -114,9 +114,11 @@ func (s *RotationService) setSecret(ctx context.Context, event RotationEvent) er
 	}
 	pubID, err := s.cloudfront.CreatePublicKey(ctx, key)
 	if err != nil {
+		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
 		return fmt.Errorf("create public key: %w", err)
 	}
 	if _, err := s.cloudfront.EnsureKeyGroup(ctx, s.cfg.KeyGroupName, pubID); err != nil {
+		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
 		return fmt.Errorf("ensure key group: %w", err)
 	}
 	s.logger.Info("setSecret: public key added to key group", "keyID", pubID, "keyGroup", s.cfg.KeyGroupName)

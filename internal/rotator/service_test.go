@@ -87,9 +87,14 @@ func TestCreateSecret_PendingAlreadyExists(t *testing.T) {
 
 func TestCreateSecret_PendingIncomplete(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	incompletePayload := &domain.SecretPayload{NamePrefix: "test"}
+	// Incomplete payload with old CreatedAt (> minInterval ago) — gets discarded
+	incompletePayload := &domain.SecretPayload{
+		NamePrefix: "test",
+		CreatedAt:  time.Now().Add(-2 * time.Hour), // 2 hours old, exceeds minInterval (60 min)
+	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(incompletePayload, nil)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Traça 1: remove stale
 	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
 	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, payload *domain.SecretPayload, token string) (string, error) {
@@ -305,6 +310,7 @@ func TestSetSecret_CreatePublicKeyError(t *testing.T) {
 	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Cleanup on error
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
 	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("", errors.New("create key failed"))
 	svc := NewRotationService(store, cf, testConfig(), discardLogger())
@@ -319,6 +325,7 @@ func TestSetSecret_EnsureKeyGroupError(t *testing.T) {
 	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Cleanup on error
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
 	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
 	cf.EXPECT().EnsureKeyGroup(gomock.Any(), gomock.Any(), gomock.Any()).Return("", errors.New("ensure group failed"))
