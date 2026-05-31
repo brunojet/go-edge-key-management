@@ -78,6 +78,9 @@ func TestCreateSecret_PendingAlreadyExists(t *testing.T) {
 	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(existingPayload, nil)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Discard existing pending
+	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).Return("v-new", nil)
 	cdnMock := cdnmocks.NewMockCdnAdapter(ctrl)
 	svc := NewRotationService(store, cdnMock, testConfig(), discardLogger())
 	if err := svc.Handle(context.Background(), testEvent("createSecret")); err != nil {
