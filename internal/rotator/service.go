@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/brunojet/go-edge-key-management/internal/domain"
 	"github.com/brunojet/go-infra-adapters/v3/pkg/crypto"
+
+	"github.com/brunojet/go-edge-key-management/internal/domain"
 )
 
 // Injectable for testing.

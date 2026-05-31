@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brunojet/go-edge-key-management/internal/domain"
 	cdnmocks "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/mocks"
 	cryptocontracts "github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
 	cryptomocks "github.com/brunojet/go-infra-adapters/v3/pkg/crypto/mocks"
 	secretmocks "github.com/brunojet/go-infra-adapters/v3/pkg/secret/mocks"
 	"github.com/golang/mock/gomock"
+
+	"github.com/brunojet/go-edge-key-management/internal/domain"
 )
 
 // --- helpers ---
@@ -32,7 +33,8 @@ func testConfig() Config {
 	}
 }
 
-func testEvent(step string) RotationEvent { //nolint:gosec
+func testEvent(step string) RotationEvent {
+	//nolint:gosec // Test fixture, not real credentials
 	return RotationEvent{
 		Step:               step,
 		SecretId:           "arn:aws:secretsmanager:us-east-1:123:secret:test",

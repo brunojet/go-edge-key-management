@@ -1,6 +1,7 @@
 //go:build !debug
 // +build !debug
 
+// Package main implements the AWS Lambda handler for secret rotation.
 package main
 
 import (
@@ -8,6 +9,7 @@ import (
 	"log"
 
 	"github.com/aws/aws-lambda-go/lambda"
+
 	"github.com/brunojet/go-edge-key-management/internal/handler"
 )
 
