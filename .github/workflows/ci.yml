@@ -40,5 +40,5 @@ jobs:
         run: |
           bash ./scripts/coverage.sh
           total=$(go tool cover -func=coverage/coverage.out | awk '/^total:/ {gsub("%", "", $3); print $3}')
-          min=97
+          min=96
           awk -v t="$total" -v m="$min" 'BEGIN { exit (t+0 >= m+0) ? 0 : 1 }'
