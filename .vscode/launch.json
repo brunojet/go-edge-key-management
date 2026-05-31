@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug rotator (local handler)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/rotator",
+      "buildFlags": "-tags=debug",
+      "args": ["-run-all", "-token=${input:debugToken}"],
+      "env": {
+        "SECRET_NAME": "/go-edge-key-management/rotator",
+        "KEY_GROUP_NAME": "go-edge-kg",
+        "NAME_PREFIX": "go-edge"
+      }
+    }
+  ]
+  ,
+  "inputs": [
+    {
+      "id": "debugToken",
+      "type": "promptString",
+      "description": "ClientRequestToken para execução de debug",
+      "default": "debug-1"
+    }
+  ]
+}
