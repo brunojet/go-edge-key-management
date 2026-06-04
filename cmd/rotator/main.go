@@ -16,6 +16,9 @@ import (
 // handlerNew is injectable for testing.
 var handlerNew = handler.New
 
+// lambdaStart is injectable for testing. Normally starts the Lambda handler.
+var lambdaStart = lambda.Start
+
 // startHandler initializes and starts the Lambda handler.
 // Separated for testability.
 func startHandler(ctx context.Context) error {
@@ -23,8 +26,8 @@ func startHandler(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	lambda.Start(h.Handle)
-	return nil // unreachable but satisfies return type
+	lambdaStart(h.Handle)
+	return nil // unreachable unless lambdaStart returns (mocked)
 }
 
 func main() {

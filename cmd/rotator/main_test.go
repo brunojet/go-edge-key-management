@@ -67,6 +67,22 @@ func TestEnv(t *testing.T) {
 	t.Log("non-debug build test passed")
 }
 
+func TestMainErrorPath(t *testing.T) {
+	// Test that main error path is reachable via startHandler error injection
+	orig := handlerNew
+	defer func() { handlerNew = orig }()
+
+	handlerNew = func(_ context.Context) (*handler.Handler, error) {
+		return nil, errors.New("init failed")
+	}
+
+	// Verify that startHandler propagates error (which main would log.Fatalf on)
+	err := startHandler(context.Background())
+	if err == nil {
+		t.Fatal("expected error path to be testable")
+	}
+}
+
 func TestStartHandlerError(t *testing.T) {
 	orig := handlerNew
 	defer func() { handlerNew = orig }()
@@ -85,15 +101,34 @@ func TestStartHandlerError(t *testing.T) {
 	}
 }
 
-func TestStartHandlerNilError(t *testing.T) {
-	orig := handlerNew
-	defer func() { handlerNew = orig }()
+func TestStartHandlerSuccess(t *testing.T) {
+	origHandler := handlerNew
+	origLambda := lambdaStart
+	defer func() {
+		handlerNew = origHandler
+		lambdaStart = origLambda
+	}()
+
+	handlerCalled := false
+	lambdaCalled := false
 
 	handlerNew = func(_ context.Context) (*handler.Handler, error) {
+		handlerCalled = true
 		return &handler.Handler{}, nil
 	}
 
-	// Note: This will actually try to call lambda.Start which will hang
-	// but that's OK for coverage purposes - we're testing the error path
-	t.Skip("startHandler calls lambda.Start which blocks indefinitely")
+	lambdaStart = func(_ interface{}) {
+		lambdaCalled = true
+	}
+
+	err := startHandler(context.Background())
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if !handlerCalled {
+		t.Error("handler.New should be called")
+	}
+	if !lambdaCalled {
+		t.Error("lambda.Start should be called")
+	}
 }
