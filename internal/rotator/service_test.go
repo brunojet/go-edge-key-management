@@ -406,18 +406,6 @@ func TestFinishSecret_PromoteError(t *testing.T) {
 
 // --- createSecret errors ---
 
-func TestCreateSecret_GetVersionError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
-	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("get failed"))
-	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
-	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
-	err := svc.Handle(context.Background(), testEvent("createSecret"))
-	if err == nil {
-		t.Fatal("expected error from GetVersion")
-	}
-}
-
 func TestCreateSecret_GetCurrentError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)

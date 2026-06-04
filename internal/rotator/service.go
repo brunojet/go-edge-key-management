@@ -115,10 +115,7 @@ func (s *RotationService) setSecret(ctx context.Context, event RotationEvent) er
 		return err
 	}
 	if _, err := s.cloudfront.EnsureKeyGroup(ctx, s.cfg.KeyGroupName, pending.PublicKeyID); err != nil {
-		if deleteErr := s.cloudfront.DeletePublicKey(ctx, pending.PublicKeyID); deleteErr != nil {
-			s.logger.Error("setSecret: failed to sanitize public key after keygroup error", "keyID", pending.PublicKeyID, "deleteErr", deleteErr)
-		}
-		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
+		s.discardPending(ctx, event, pending)
 		return fmt.Errorf("ensure key group (public key sanitized): %w", err)
 	}
 	s.logger.Info("setSecret: public key added to key group", "keyID", pending.PublicKeyID, "keyGroup", s.cfg.KeyGroupName)
