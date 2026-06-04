@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	cdnmocks "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/mocks"
-	cryptocontracts "github.com/brunojet/go-infra-adapters/v3/pkg/crypto/contracts"
-	cryptomocks "github.com/brunojet/go-infra-adapters/v3/pkg/crypto/mocks"
-	secretmocks "github.com/brunojet/go-infra-adapters/v3/pkg/secret/mocks"
+	cdnmocks "github.com/brunojet/go-infra-adapters/v4/pkg/cdn/mocks"
+	cryptocontracts "github.com/brunojet/go-infra-adapters/v4/pkg/crypto/contracts"
+	cryptomocks "github.com/brunojet/go-infra-adapters/v4/pkg/crypto/mocks"
+	secretmocks "github.com/brunojet/go-infra-adapters/v4/pkg/secret/mocks"
 	"github.com/golang/mock/gomock"
 
 	"github.com/brunojet/go-edge-key-management/internal/domain"
