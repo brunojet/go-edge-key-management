@@ -37,6 +37,7 @@ func TestSecretPayload(t *testing.T) {
 		CreatedAt:    now,
 		KeyGroupName: "test-group",
 		NamePrefix:   "test",
+		PublicKeyID:  "key-id-123",
 	}
 
 	if sp.PrivatePEM != "private" {
@@ -56,6 +57,9 @@ func TestSecretPayload(t *testing.T) {
 	}
 	if sp.NamePrefix != "test" {
 		t.Errorf("NamePrefix: got %q, want %q", sp.NamePrefix, "test")
+	}
+	if sp.PublicKeyID != "key-id-123" {
+		t.Errorf("PublicKeyID: got %q, want %q", sp.PublicKeyID, "key-id-123")
 	}
 }
 
@@ -145,6 +149,20 @@ func TestSecretPayload_IsValid(t *testing.T) {
 				CreatedAt:    now,
 				KeyGroupName: "group",
 				NamePrefix:   "",
+				PublicKeyID:  "key-id-123",
+			},
+			want: false,
+		},
+		{
+			name: "missing public key id",
+			payload: &SecretPayload{
+				PrivatePEM:   "private",
+				PublicPEM:    "public",
+				Fingerprint:  "fingerprint",
+				CreatedAt:    now,
+				KeyGroupName: "group",
+				NamePrefix:   "prefix",
+				PublicKeyID:  "",
 			},
 			want: false,
 		},
@@ -157,6 +175,7 @@ func TestSecretPayload_IsValid(t *testing.T) {
 				CreatedAt:    now,
 				KeyGroupName: "group",
 				NamePrefix:   "prefix",
+				PublicKeyID:  "key-id-123",
 			},
 			want: true,
 		},

@@ -64,18 +64,13 @@ func (s *RotationService) Handle(ctx context.Context, event RotationEvent) error
 	}
 }
 
-// createSecret generates a new RSA key pair and stores it as the AWSPENDING version.
+// createSecret generates a new RSA key pair, creates the public key in CloudFront,
+// and stores it as the AWSPENDING version.
 // No-op when a pending version already exists and is valid. Regenerates if incomplete.
 // Enforces the minimum rotation interval.
 // Detects stale/stuck AWSPENDING and aborts rapid retries to prevent loops.
 func (s *RotationService) createSecret(ctx context.Context, event RotationEvent) error {
-	pending, err := s.getPending(ctx, event)
-	if err != nil {
-		return err
-	}
-	if pending != nil {
-		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
-	}
+	s.cleanupPending(ctx, event)
 	minInterval := time.Duration(s.cfg.MinRotationIntervalMinutes) * time.Minute
 	if _, err := s.getCurrentWithIntervalCheck(ctx, minInterval); err != nil {
 		return err
@@ -84,6 +79,15 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 	if err != nil {
 		return fmt.Errorf("generate key pair: %w", err)
 	}
+	key := domain.CdnKey{
+		Name:      cdnKeyName(s.cfg.NamePrefix, kp.Fingerprint),
+		PEM:       string(kp.PublicPEM),
+		GroupName: s.cfg.KeyGroupName,
+	}
+	pubID, err := s.cloudfront.CreatePublicKey(ctx, key)
+	if err != nil {
+		return fmt.Errorf("create public key: %w", err)
+	}
 	payload := &domain.SecretPayload{
 		PrivatePEM:   string(kp.PrivatePEM),
 		PublicPEM:    string(kp.PublicPEM),
@@ -91,60 +95,45 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 		CreatedAt:    time.Now().UTC(),
 		KeyGroupName: s.cfg.KeyGroupName,
 		NamePrefix:   s.cfg.NamePrefix,
+		PublicKeyID:  pubID,
 	}
 	if _, err := s.secrets.SetVersion(ctx, payload, event.ClientRequestToken); err != nil {
-		return fmt.Errorf("store pending secret: %w", err)
+		s.discardPublicKey(ctx, pubID)
+		return fmt.Errorf("store pending secret (public key sanitized): %w", err)
 	}
-	s.logger.Info("createSecret: pending version written", "version", event.ClientRequestToken)
+	s.logger.Info("createSecret: public key created and pending version written", "keyID", pubID, "version", event.ClientRequestToken)
 	return nil
 }
 
-// setSecret uploads the pending public key to CloudFront and ensures the KeyGroup contains it.
+// setSecret ensures the pending public key is added to the CloudFront KeyGroup.
+// If KeyGroup update fails, sanitizes (removes) the public key before returning error.
 func (s *RotationService) setSecret(ctx context.Context, event RotationEvent) error {
-	pending, err := s.getPending(ctx, event)
+	pending, err := s.getPendingIfValid(ctx, event)
 	if err != nil {
 		return err
 	}
-	if pending == nil {
-		return fmt.Errorf("setSecret: pending version %s not found", event.ClientRequestToken)
+	if _, err := s.cloudfront.EnsureKeyGroup(ctx, s.cfg.KeyGroupName, pending.PublicKeyID); err != nil {
+		s.discardPending(ctx, event, pending)
+		return fmt.Errorf("ensure key group (public key sanitized): %w", err)
 	}
-	key := domain.CdnKey{
-		Name:      cdnKeyName(s.cfg.NamePrefix, pending.Fingerprint),
-		PEM:       pending.PublicPEM,
-		GroupName: s.cfg.KeyGroupName,
-	}
-	pubID, err := s.cloudfront.CreatePublicKey(ctx, key)
-	if err != nil {
-		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
-		return fmt.Errorf("create public key: %w", err)
-	}
-	if _, err := s.cloudfront.EnsureKeyGroup(ctx, s.cfg.KeyGroupName, pubID); err != nil {
-		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
-		return fmt.Errorf("ensure key group: %w", err)
-	}
-	s.logger.Info("setSecret: public key added to key group", "keyID", pubID, "keyGroup", s.cfg.KeyGroupName)
+	s.logger.Info("setSecret: public key added to key group", "keyID", pending.PublicKeyID, "keyGroup", s.cfg.KeyGroupName)
 	return nil
 }
 
 // testSecret verifies that the pending public key is visible in the CloudFront KeyGroup.
 func (s *RotationService) testSecret(ctx context.Context, event RotationEvent) error {
-	pending, err := s.getPending(ctx, event)
+	pending, err := s.getPendingIfValid(ctx, event)
 	if err != nil {
 		return err
-	}
-	if pending == nil {
-		return fmt.Errorf("testSecret: pending version %s not found", event.ClientRequestToken)
 	}
 	key := domain.CdnKey{
 		Name:      cdnKeyName(s.cfg.NamePrefix, pending.Fingerprint),
 		GroupName: s.cfg.KeyGroupName,
 	}
 	found, err := s.cloudfront.VerifyKeyInGroup(ctx, key)
-	if err != nil {
-		return fmt.Errorf("verify public key in key group: %w", err)
-	}
-	if !found {
-		return fmt.Errorf("testSecret: pending public key not found in key group %s", s.cfg.KeyGroupName)
+	if err != nil || !found {
+		s.discardPublicKey(ctx, pending.PublicKeyID)
+		return fmt.Errorf("verify pending public key in key group (public key sanitized): %w", err)
 	}
 	s.logger.Info("testSecret: pending key verified in key group", "version", event.ClientRequestToken, "keyGroup", s.cfg.KeyGroupName)
 	return nil
