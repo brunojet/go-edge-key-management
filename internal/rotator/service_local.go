@@ -18,20 +18,21 @@ func (s *RotationService) getPending(ctx context.Context, event RotationEvent) (
 	return payload, nil
 }
 
+func (s *RotationService) discardPublicKey(ctx context.Context, keyID string) {
+	if keyID == "" {
+		return
+	}
+	err := s.cloudfront.DeletePublicKey(ctx, keyID)
+	s.logger.Info("discardPublicKey: failed to delete public key", "keyID", keyID, "error", err)
+}
+
 func (s *RotationService) discardPending(ctx context.Context, event RotationEvent, payload *domain.SecretPayload) {
 	if payload == nil {
 		return
 	}
-	if payload.PublicKeyID != "" {
-		if err := s.cloudfront.DeletePublicKey(ctx, payload.PublicKeyID); err != nil {
-			s.logger.Error("cleanupPending: failed to delete public key", "keyID", payload.PublicKeyID, "error", err)
-		}
-	}
-	if err := s.secrets.DiscardVersion(ctx, event.ClientRequestToken); err != nil {
-		s.logger.Error("discardPending: failed to discard pending version", "version", event.ClientRequestToken, "error", err)
-	} else {
-		s.logger.Info("discardPending: pending version discarded", "version", event.ClientRequestToken)
-	}
+	s.discardPublicKey(ctx, payload.PublicKeyID)
+	err := s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
+	s.logger.Info("discardPending: failed to discard pending version", "version", event.ClientRequestToken, "error", err)
 }
 
 func (s *RotationService) cleanupPending(ctx context.Context, event RotationEvent) {

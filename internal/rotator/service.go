@@ -98,9 +98,7 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 		PublicKeyID:  pubID,
 	}
 	if _, err := s.secrets.SetVersion(ctx, payload, event.ClientRequestToken); err != nil {
-		if deleteErr := s.cloudfront.DeletePublicKey(ctx, pubID); deleteErr != nil {
-			s.logger.Error("createSecret: failed to sanitize public key after secret store error", "keyID", pubID, "deleteErr", deleteErr)
-		}
+		s.discardPublicKey(ctx, pubID)
 		return fmt.Errorf("store pending secret (public key sanitized): %w", err)
 	}
 	s.logger.Info("createSecret: public key created and pending version written", "keyID", pubID, "version", event.ClientRequestToken)
@@ -133,11 +131,9 @@ func (s *RotationService) testSecret(ctx context.Context, event RotationEvent) e
 		GroupName: s.cfg.KeyGroupName,
 	}
 	found, err := s.cloudfront.VerifyKeyInGroup(ctx, key)
-	if err != nil {
-		return fmt.Errorf("verify public key in key group: %w", err)
-	}
-	if !found {
-		return fmt.Errorf("testSecret: pending public key not found in key group %s", s.cfg.KeyGroupName)
+	if err != nil || !found {
+		s.discardPublicKey(ctx, pending.PublicKeyID)
+		return fmt.Errorf("verify pending public key in key group (public key sanitized): %w", err)
 	}
 	s.logger.Info("testSecret: pending key verified in key group", "version", event.ClientRequestToken, "keyGroup", s.cfg.KeyGroupName)
 	return nil

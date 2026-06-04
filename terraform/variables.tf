@@ -40,12 +40,12 @@ variable "initial_public_key_ids" {
 
 variable "lambda_memory_size" {
   type    = number
-  default = 256
+  default = 128
 }
 
 variable "lambda_timeout" {
   type    = number
-  default = 15
+  default = 30
 }
 
 variable "tags" {

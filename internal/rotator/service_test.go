@@ -353,6 +353,7 @@ func TestTestSecret_KeyNotInGroup(t *testing.T) {
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
 	cf.EXPECT().VerifyKeyInGroup(gomock.Any(), gomock.Any()).Return(false, nil)
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil)
 	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	err := svc.Handle(context.Background(), testEvent("testSecret"))
 	if err == nil {
@@ -545,6 +546,7 @@ func TestTestSecret_VerifyKeyError(t *testing.T) {
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
 	cf.EXPECT().VerifyKeyInGroup(gomock.Any(), gomock.Any()).Return(false, errors.New("verify failed"))
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil)
 	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	err := svc.Handle(context.Background(), testEvent("testSecret"))
 	if err == nil {
