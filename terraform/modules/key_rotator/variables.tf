@@ -38,7 +38,7 @@ variable "initial_public_key_ids" {
 
 variable "lambda_memory_size" {
   type    = number
-  default = 128
+  default = 256
 }
 
 variable "lambda_timeout" {
