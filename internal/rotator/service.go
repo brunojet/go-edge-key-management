@@ -70,13 +70,7 @@ func (s *RotationService) Handle(ctx context.Context, event RotationEvent) error
 // Enforces the minimum rotation interval.
 // Detects stale/stuck AWSPENDING and aborts rapid retries to prevent loops.
 func (s *RotationService) createSecret(ctx context.Context, event RotationEvent) error {
-	pending, err := s.getPending(ctx, event)
-	if err != nil {
-		return err
-	}
-	if pending != nil {
-		_ = s.secrets.DiscardVersion(ctx, event.ClientRequestToken)
-	}
+	s.cleanupPending(ctx, event)
 	minInterval := time.Duration(s.cfg.MinRotationIntervalMinutes) * time.Minute
 	if _, err := s.getCurrentWithIntervalCheck(ctx, minInterval); err != nil {
 		return err
@@ -116,15 +110,9 @@ func (s *RotationService) createSecret(ctx context.Context, event RotationEvent)
 // setSecret ensures the pending public key is added to the CloudFront KeyGroup.
 // If KeyGroup update fails, sanitizes (removes) the public key before returning error.
 func (s *RotationService) setSecret(ctx context.Context, event RotationEvent) error {
-	pending, err := s.getPending(ctx, event)
+	pending, err := s.getPendingIfValid(ctx, event)
 	if err != nil {
 		return err
-	}
-	if pending == nil {
-		return fmt.Errorf("setSecret: pending version %s not found", event.ClientRequestToken)
-	}
-	if pending.PublicKeyID == "" {
-		return fmt.Errorf("setSecret: public key ID not found in pending secret")
 	}
 	if _, err := s.cloudfront.EnsureKeyGroup(ctx, s.cfg.KeyGroupName, pending.PublicKeyID); err != nil {
 		if deleteErr := s.cloudfront.DeletePublicKey(ctx, pending.PublicKeyID); deleteErr != nil {
@@ -139,12 +127,9 @@ func (s *RotationService) setSecret(ctx context.Context, event RotationEvent) er
 
 // testSecret verifies that the pending public key is visible in the CloudFront KeyGroup.
 func (s *RotationService) testSecret(ctx context.Context, event RotationEvent) error {
-	pending, err := s.getPending(ctx, event)
+	pending, err := s.getPendingIfValid(ctx, event)
 	if err != nil {
 		return err
-	}
-	if pending == nil {
-		return fmt.Errorf("testSecret: pending version %s not found", event.ClientRequestToken)
 	}
 	key := domain.CdnKey{
 		Name:      cdnKeyName(s.cfg.NamePrefix, pending.Fingerprint),
