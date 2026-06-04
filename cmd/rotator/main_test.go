@@ -9,11 +9,31 @@ import (
 	"github.com/brunojet/go-edge-key-management/internal/handler"
 )
 
-func TestMain(t *testing.T) {
-	// main() cannot be tested directly as it calls lambda.Start()
-	// This test exists to satisfy coverage requirements.
-	// Integration testing is handled by Lambda runtime.
-	t.Skip("main() integration testing via Lambda runtime")
+func TestMainSuccess(t *testing.T) {
+	origHandler := handlerNew
+	origLambda := lambdaStart
+	origLogFatalf := logFatalf
+	defer func() {
+		handlerNew = origHandler
+		lambdaStart = origLambda
+		logFatalf = origLogFatalf
+	}()
+
+	handlerNew = func(_ context.Context) (*handler.Handler, error) {
+		return &handler.Handler{}, nil
+	}
+
+	lambdaStart = func(_ interface{}) {
+		// no-op
+	}
+
+	logFatalf = func(_ string, _ ...interface{}) {
+		// no-op for test
+	}
+
+	// Call main() which calls runMain()
+	main()
+	// If we reach here, main() executed successfully
 }
 
 func TestHandlerNewError(t *testing.T) {
@@ -130,5 +150,64 @@ func TestStartHandlerSuccess(t *testing.T) {
 	}
 	if !lambdaCalled {
 		t.Error("lambda.Start should be called")
+	}
+}
+
+func TestRunMainError(t *testing.T) {
+	origHandler := handlerNew
+	origLogFatalf := logFatalf
+	defer func() {
+		handlerNew = origHandler
+		logFatalf = origLogFatalf
+	}()
+
+	expectedErr := errors.New("test error")
+	handlerNew = func(_ context.Context) (*handler.Handler, error) {
+		return nil, expectedErr
+	}
+
+	fatalfCalled := false
+	logFatalf = func(_ string, _ ...interface{}) {
+		fatalfCalled = true
+	}
+
+	err := runMain()
+	if err != expectedErr {
+		t.Errorf("expected %v, got %v", expectedErr, err)
+	}
+	if !fatalfCalled {
+		t.Error("logFatalf should be called on error")
+	}
+}
+
+func TestRunMainSuccess(t *testing.T) {
+	origHandler := handlerNew
+	origLambda := lambdaStart
+	origLogFatalf := logFatalf
+	defer func() {
+		handlerNew = origHandler
+		lambdaStart = origLambda
+		logFatalf = origLogFatalf
+	}()
+
+	handlerNew = func(_ context.Context) (*handler.Handler, error) {
+		return &handler.Handler{}, nil
+	}
+
+	lambdaStart = func(_ interface{}) {
+		// no-op
+	}
+
+	fatalfCalled := false
+	logFatalf = func(_ string, _ ...interface{}) {
+		fatalfCalled = true
+	}
+
+	err := runMain()
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if fatalfCalled {
+		t.Error("logFatalf should not be called on success")
 	}
 }
