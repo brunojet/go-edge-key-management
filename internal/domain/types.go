@@ -24,6 +24,7 @@ type SecretPayload struct {
 	CreatedAt    time.Time `json:"created_at"`
 	KeyGroupName string    `json:"key_group_name"`
 	NamePrefix   string    `json:"name_prefix"`
+	PublicKeyID  string    `json:"public_key_id"`
 }
 
 // CdnKey re-exports the adapter type for backward compatibility.
@@ -38,5 +39,6 @@ func (p *SecretPayload) IsValid() bool {
 		p.Fingerprint != "" &&
 		!p.CreatedAt.IsZero() &&
 		p.KeyGroupName != "" &&
-		p.NamePrefix != ""
+		p.NamePrefix != "" &&
+		p.PublicKeyID != ""
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +41,142 @@ func testEvent(step string) RotationEvent {
 		SecretId:           "arn:aws:secretsmanager:us-east-1:123:secret:test",
 		ClientRequestToken: "test-token-0123456789012345678901",
 	}
+}
+
+// --- getPendingIfValid ---
+
+func TestGetPendingIfValid_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	payload := &domain.SecretPayload{
+		PrivatePEM:   "private",
+		PublicPEM:    "public",
+		Fingerprint:  "fingerprint",
+		CreatedAt:    time.Now().UTC(),
+		KeyGroupName: "group",
+		NamePrefix:   "prefix",
+		PublicKeyID:  "key-id",
+	}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(payload, nil)
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+
+	got, err := svc.getPendingIfValid(context.Background(), testEvent("setSecret"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil payload")
+	}
+}
+
+func TestGetPendingIfValid_GetVersionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("get failed"))
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+
+	_, err := svc.getPendingIfValid(context.Background(), testEvent("setSecret"))
+	if err == nil {
+		t.Error("expected error from GetVersion")
+	}
+}
+
+func TestGetPendingIfValid_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+
+	_, err := svc.getPendingIfValid(context.Background(), testEvent("setSecret"))
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error, got %v", err)
+	}
+}
+
+func TestGetPendingIfValid_Invalid(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	payload := &domain.SecretPayload{} // Empty, invalid
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(payload, nil)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+
+	_, err := svc.getPendingIfValid(context.Background(), testEvent("setSecret"))
+	if err == nil || !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("expected 'invalid' error, got %v", err)
+	}
+}
+
+func TestDiscardPending_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	payload := &domain.SecretPayload{PublicKeyID: "key-id-123"}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil)
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+
+	svc.discardPending(context.Background(), testEvent("createSecret"), payload)
+	// No error returned, just verifying calls were made (via gomock expectations)
+}
+
+func TestDiscardPending_NoPublicKeyID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	payload := &domain.SecretPayload{} // No PublicKeyID
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+
+	svc.discardPending(context.Background(), testEvent("createSecret"), payload)
+	// Should skip DeletePublicKey since PublicKeyID is empty
+}
+
+func TestDiscardPending_DeleteKeyError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	payload := &domain.SecretPayload{PublicKeyID: "key-id-123"}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(errors.New("delete failed"))
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+
+	// Should not panic, just log error
+	svc.discardPending(context.Background(), testEvent("createSecret"), payload)
+}
+
+func TestCleanupPending_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	payload := &domain.SecretPayload{PublicKeyID: "key-id-123"}
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(payload, nil)
+	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil)
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+
+	svc.cleanupPending(context.Background(), testEvent("createSecret"))
+}
+
+func TestCleanupPending_GetVersionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("get failed"))
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+
+	// Should return early, not panic
+	svc.cleanupPending(context.Background(), testEvent("createSecret"))
+}
+
+func TestCleanupPending_NilPayload(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+
+	// Should return early
+	svc.cleanupPending(context.Background(), testEvent("createSecret"))
 }
 
 // --- Handle ---
@@ -82,8 +219,9 @@ func TestCreateSecret_PendingAlreadyExists(t *testing.T) {
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(existingPayload, nil)
 	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Discard existing pending
 	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
-	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).Return("v-new", nil)
 	cdnMock := cdnmocks.NewMockCdnAdapter(ctrl)
+	cdnMock.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
+	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).Return("v-new", nil)
 	svc := NewRotationService(store, cdnMock, testConfig(), discardLogger())
 	if err := svc.Handle(context.Background(), testEvent("createSecret")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -101,11 +239,12 @@ func TestCreateSecret_PendingIncomplete(t *testing.T) {
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(incompletePayload, nil)
 	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Traça 1: remove stale
 	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	cdnMock := cdnmocks.NewMockCdnAdapter(ctrl)
+	cdnMock.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
 	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, payload *domain.SecretPayload, token string) (string, error) {
 			return token, nil
 		})
-	cdnMock := cdnmocks.NewMockCdnAdapter(ctrl)
 	svc := NewRotationService(store, cdnMock, testConfig(), discardLogger())
 	if err := svc.Handle(context.Background(), testEvent("createSecret")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -131,13 +270,15 @@ func TestCreateSecret_CurrentHasZeroCreatedAt(t *testing.T) {
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
 	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{CreatedAt: time.Time{}}, nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
 	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, payload *domain.SecretPayload, token string) (string, error) {
 			return token, nil
 		})
 	cfg := testConfig()
 	cfg.MinRotationIntervalMinutes = 60
-	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), cfg, discardLogger())
+	svc := NewRotationService(store, cf, cfg, discardLogger())
 	if err := svc.Handle(context.Background(), testEvent("createSecret")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,11 +289,13 @@ func TestCreateSecret_Success(t *testing.T) {
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
 	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
 	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, payload *domain.SecretPayload, token string) (string, error) {
 			return token, nil
 		})
-	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	evt := testEvent("createSecret")
 	if err := svc.Handle(context.Background(), evt); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -174,11 +317,18 @@ func TestSetSecret_PendingNotFound(t *testing.T) {
 
 func TestSetSecret_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	pending := &domain.SecretPayload{
+		PrivatePEM:   "private",
+		PublicPEM:    "public",
+		Fingerprint:  "abc12345def67890",
+		CreatedAt:    time.Now().UTC(),
+		KeyGroupName: "test-group",
+		NamePrefix:   "test",
+		PublicKeyID:  "key-id-123",
+	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
-	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
 	cf.EXPECT().EnsureKeyGroup(gomock.Any(), gomock.Any(), gomock.Any()).Return("group-id-456", nil)
 	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	if err := svc.Handle(context.Background(), testEvent("setSecret")); err != nil {
@@ -190,11 +340,20 @@ func TestSetSecret_Success(t *testing.T) {
 
 func TestTestSecret_KeyNotInGroup(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	pending := &domain.SecretPayload{
+		PrivatePEM:   "private",
+		PublicPEM:    "public",
+		Fingerprint:  "abc12345def67890",
+		CreatedAt:    time.Now().UTC(),
+		KeyGroupName: "test-group",
+		NamePrefix:   "test",
+		PublicKeyID:  "key-id-123",
+	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
 	cf.EXPECT().VerifyKeyInGroup(gomock.Any(), gomock.Any()).Return(false, nil)
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil)
 	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	err := svc.Handle(context.Background(), testEvent("testSecret"))
 	if err == nil {
@@ -204,7 +363,15 @@ func TestTestSecret_KeyNotInGroup(t *testing.T) {
 
 func TestTestSecret_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	pending := &domain.SecretPayload{
+		PrivatePEM:   "private",
+		PublicPEM:    "public",
+		Fingerprint:  "abc12345def67890",
+		CreatedAt:    time.Now().UTC(),
+		KeyGroupName: "test-group",
+		NamePrefix:   "test",
+		PublicKeyID:  "key-id-123",
+	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
@@ -239,17 +406,6 @@ func TestFinishSecret_PromoteError(t *testing.T) {
 }
 
 // --- createSecret errors ---
-
-func TestCreateSecret_GetVersionError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
-	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, errors.New("get failed"))
-	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
-	err := svc.Handle(context.Background(), testEvent("createSecret"))
-	if err == nil {
-		t.Fatal("expected error from GetVersion")
-	}
-}
 
 func TestCreateSecret_GetCurrentError(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -289,11 +445,28 @@ func TestCreateSecret_SetVersionError(t *testing.T) {
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
 	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
 	store.EXPECT().SetVersion(gomock.Any(), gomock.Any(), gomock.Any()).Return("", errors.New("set failed"))
-	svc := NewRotationService(store, cdnmocks.NewMockCdnAdapter(ctrl), testConfig(), discardLogger())
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil) // Sanitize on error
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	err := svc.Handle(context.Background(), testEvent("createSecret"))
 	if err == nil {
 		t.Fatal("expected error from SetVersion")
+	}
+}
+
+func TestCreateSecret_CreatePublicKeyError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
+	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(nil, nil)
+	store.EXPECT().GetCurrent(gomock.Any()).Return(&domain.SecretPayload{}, nil)
+	cf := cdnmocks.NewMockCdnAdapter(ctrl)
+	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("", errors.New("create key failed"))
+	svc := NewRotationService(store, cf, testConfig(), discardLogger())
+	err := svc.Handle(context.Background(), testEvent("createSecret"))
+	if err == nil {
+		t.Fatal("expected error from CreatePublicKey")
 	}
 }
 
@@ -310,30 +483,23 @@ func TestSetSecret_GetVersionError(t *testing.T) {
 	}
 }
 
-func TestSetSecret_CreatePublicKeyError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
-	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
-	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
-	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Cleanup on error
-	cf := cdnmocks.NewMockCdnAdapter(ctrl)
-	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("", errors.New("create key failed"))
-	svc := NewRotationService(store, cf, testConfig(), discardLogger())
-	err := svc.Handle(context.Background(), testEvent("setSecret"))
-	if err == nil {
-		t.Fatal("expected error from CreatePublicKey")
-	}
-}
-
 func TestSetSecret_EnsureKeyGroupError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	pending := &domain.SecretPayload{
+		PrivatePEM:   "private",
+		PublicPEM:    "public",
+		Fingerprint:  "abc12345def67890",
+		CreatedAt:    time.Now().UTC(),
+		KeyGroupName: "test-group",
+		NamePrefix:   "test",
+		PublicKeyID:  "key-id-123",
+	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
 	store.EXPECT().DiscardVersion(gomock.Any(), gomock.Any()).Return(nil) // Cleanup on error
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
-	cf.EXPECT().CreatePublicKey(gomock.Any(), gomock.Any()).Return("key-id-123", nil)
-	cf.EXPECT().EnsureKeyGroup(gomock.Any(), gomock.Any(), gomock.Any()).Return("", errors.New("ensure group failed"))
+	cf.EXPECT().EnsureKeyGroup(gomock.Any(), gomock.Any(), "key-id-123").Return("", errors.New("ensure group failed"))
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil) // Sanitize on error
 	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	err := svc.Handle(context.Background(), testEvent("setSecret"))
 	if err == nil {
@@ -367,11 +533,20 @@ func TestTestSecret_PendingNotFound(t *testing.T) {
 
 func TestTestSecret_VerifyKeyError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	pending := &domain.SecretPayload{NamePrefix: "test", Fingerprint: "abc12345def67890", KeyGroupName: "test-group"}
+	pending := &domain.SecretPayload{
+		PrivatePEM:   "private",
+		PublicPEM:    "public",
+		Fingerprint:  "abc12345def67890",
+		CreatedAt:    time.Now().UTC(),
+		KeyGroupName: "test-group",
+		NamePrefix:   "test",
+		PublicKeyID:  "key-id-123",
+	}
 	store := secretmocks.NewMockSecretAdapter[domain.SecretPayload](ctrl)
 	store.EXPECT().GetVersion(gomock.Any(), gomock.Any()).Return(pending, nil)
 	cf := cdnmocks.NewMockCdnAdapter(ctrl)
 	cf.EXPECT().VerifyKeyInGroup(gomock.Any(), gomock.Any()).Return(false, errors.New("verify failed"))
+	cf.EXPECT().DeletePublicKey(gomock.Any(), "key-id-123").Return(nil)
 	svc := NewRotationService(store, cf, testConfig(), discardLogger())
 	err := svc.Handle(context.Background(), testEvent("testSecret"))
 	if err == nil {
