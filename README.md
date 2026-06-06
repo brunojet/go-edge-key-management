@@ -24,6 +24,7 @@ Result: **Zero-downtime key rotation, fully automated.**
 | Document | Purpose |
 |----------|---------|
 | [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) | Design, flow, components, decisions |
+| [**DIAGRAMS.md**](docs/DIAGRAMS.md) | Mermaid architecture & sequence diagrams |
 | [**OPERATIONS.md**](docs/OPERATIONS.md) | Monitoring, maintenance, procedures |
 | [**FAILURE_RUNBOOK.md**](docs/FAILURE_RUNBOOK.md) | Troubleshooting & recovery |
 | [**RISK_ANALYSIS.md**](docs/RISK_ANALYSIS.md) | Security & operational risks |
