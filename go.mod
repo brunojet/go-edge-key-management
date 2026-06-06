@@ -4,9 +4,11 @@ go 1.26.3
 
 require (
 	github.com/aws/aws-lambda-go v1.54.0
-	github.com/brunojet/go-infra-adapters/v3 v3.3.0
+	github.com/brunojet/go-infra-adapters/v4 v4.0.0-dev
 	github.com/golang/mock v1.6.0
 )
+
+replace github.com/brunojet/go-infra-adapters/v4 => ../go-infra-adapters
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.9 // indirect

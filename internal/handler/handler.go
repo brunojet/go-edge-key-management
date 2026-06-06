@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	cdnaws "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/aws"
-	secretaws "github.com/brunojet/go-infra-adapters/v3/pkg/secret/aws"
+	cdnaws "github.com/brunojet/go-infra-adapters/v4/pkg/cdn/aws"
+	secretaws "github.com/brunojet/go-infra-adapters/v4/pkg/secret/aws"
 
 	"github.com/brunojet/go-edge-key-management/internal/domain"
 	"github.com/brunojet/go-edge-key-management/internal/rotator"

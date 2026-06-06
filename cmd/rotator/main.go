@@ -19,6 +19,9 @@ var handlerNew = handler.New
 // lambdaStart is injectable for testing. Normally starts the Lambda handler.
 var lambdaStart = lambda.Start
 
+// logFatalf is injectable for testing (normally log.Fatalf).
+var logFatalf = log.Fatalf
+
 // startHandler initializes and starts the Lambda handler.
 // Separated for testability.
 func startHandler(ctx context.Context) error {
@@ -30,8 +33,15 @@ func startHandler(ctx context.Context) error {
 	return nil // unreachable unless lambdaStart returns (mocked)
 }
 
-func main() {
+// runMain is the main entry point, testable via dependency injection.
+func runMain() error {
 	if err := startHandler(context.Background()); err != nil {
-		log.Fatalf("init: %v", err)
+		logFatalf("init: %v", err)
+		return err
 	}
+	return nil
+}
+
+func main() {
+	_ = runMain() // runMain calls logFatalf which exits, but we capture the error for testing
 }

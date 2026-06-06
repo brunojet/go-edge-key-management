@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
-	cdnaws "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/aws"
-	cdncontracts "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/contracts"
-	cdnmocks "github.com/brunojet/go-infra-adapters/v3/pkg/cdn/mocks"
-	secretaws "github.com/brunojet/go-infra-adapters/v3/pkg/secret/aws"
-	secretcontracts "github.com/brunojet/go-infra-adapters/v3/pkg/secret/contracts"
-	secretmocks "github.com/brunojet/go-infra-adapters/v3/pkg/secret/mocks"
+	cdnaws "github.com/brunojet/go-infra-adapters/v4/pkg/cdn/aws"
+	cdncontracts "github.com/brunojet/go-infra-adapters/v4/pkg/cdn/contracts"
+	cdnmocks "github.com/brunojet/go-infra-adapters/v4/pkg/cdn/mocks"
+	secretaws "github.com/brunojet/go-infra-adapters/v4/pkg/secret/aws"
+	secretcontracts "github.com/brunojet/go-infra-adapters/v4/pkg/secret/contracts"
+	secretmocks "github.com/brunojet/go-infra-adapters/v4/pkg/secret/mocks"
 	"github.com/golang/mock/gomock"
 
 	"github.com/brunojet/go-edge-key-management/internal/domain"
