@@ -181,28 +181,7 @@ func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent)
 
 ## Riscos Médios
 
-### RISK-07: MinRotationInterval muito baixo (flood attacks)
-
-**Cenário**
-- `MinRotationIntervalMinutes = 1` (configurável)
-- Múltiplas rotações por dia
-- CloudFront API rate limiting
-
-**Impacto**
-- API throttling (429 Too Many Requests)
-- Acumula public keys no CloudFront rapidamente
-- Custo operacional sobe
-
-**Mitigação recomendada**
-- Default: `MinRotationIntervalMinutes = 1440` (1 dia)
-- CloudFront key group máximo: 2 keys (current + previous)
-- Monitorar: count de `createSecret` invocações por hora
-
-**Status:** 🟡 **RECOMENDADO** — documentar configuração em CLAUDE.md
-
----
-
-### RISK-08: Lambda timeout durante rotação (step partial execution)
+### RISK-07: Lambda timeout durante rotação (step partial execution)
 
 **Cenário**
 - Lambda timeout = 60s
@@ -224,7 +203,7 @@ func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent)
 
 ## Riscos Baixos
 
-### RISK-09: Secrets Manager version limit (100 versions)
+### RISK-08: Secrets Manager version limit (100 versions)
 
 **Cenário**
 - Rotações diárias por 100+ dias sem cleanup
@@ -242,7 +221,7 @@ func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent)
 
 ---
 
-### RISK-10: RSA key generation side-channel (timing attacks)
+### RISK-09: RSA key generation side-channel (timing attacks)
 
 **Cenário**
 - RSA gen não é constant-time
@@ -260,22 +239,11 @@ func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent)
 
 ---
 
-## Recomendações operacionais
+## PENDÊNCIAS DECLARADAS
 
-### Monitoramento
-- ✅ CloudWatch logs estruturados (cada step loggado)
-- ✅ Métricas: Lambda duration, error count, step breakdown
-- 🟡 **TODO:** CloudWatch alarm se `createSecret` invocações/hora > X
-
-### Teste
-- ✅ Testes unitários (injeção de mocks)
-- ✅ Integração local (LocalStack)
-- 🟡 **TODO:** Teste de rotação end-to-end (manual em staging)
-
-### Documentação
-- ✅ Arquitetura (este documento)
-- ✅ Fluxo (4 steps)
-- 🟡 **TODO:** Runbook: "Rotação falhou — como investigar"
+1. **CloudWatch alarm** — Alertar se `createSecret` invocações/hora > X (flood detection)
+2. **Teste end-to-end staging** — Validar rotação completa em staging (não apenas unitário)
+3. **Runbook failure** — Documentar investigação: "Rotação falhou — diagnóstico + recovery steps"
 
 ---
 
@@ -286,7 +254,7 @@ func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent)
 Arquitetura usa padrões nativos do AWS (Secrets Manager rotation contract) com cleanup automático e idempotência em cada step. Riscos críticos foram mitigados com sanitização de recursos órfãos e gates de verificação.
 
 **Ações antes de ir para prod:**
-1. ✅ Definir `MinRotationIntervalMinutes` apropriado (recomendado: 1440)
-2. ✅ Ativar CloudWatch alarms (template pronto em `terraform/monitoring.tf`)
-3. ✅ Documentar runbook de failure scenarios
-4. 🔄 Executar 1 rotação completa em staging (validar fluxo)
+1. ✅ `MinRotationIntervalMinutes = 60` (default 1h, protege flood)
+2. 🔄 CloudWatch alarm para flood detection (createSecret invocações/hora)
+3. 🔄 Teste end-to-end em staging
+4. 🔄 Runbook: diagnóstico + recovery de falhas
