@@ -253,8 +253,14 @@ func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent)
 
 Arquitetura usa padrões nativos do AWS (Secrets Manager rotation contract) com cleanup automático e idempotência em cada step. Riscos críticos foram mitigados com sanitização de recursos órfãos e gates de verificação.
 
-**Ações antes de ir para prod:**
-1. ✅ `MinRotationIntervalMinutes = 60` (default 1h, protege flood)
-2. 🔄 CloudWatch alarm para flood detection (createSecret invocações/hora)
-3. 🔄 Teste end-to-end em staging
-4. 🔄 Runbook: diagnóstico + recovery de falhas
+**Status de conclusão:**
+1. ✅ `MinRotationIntervalMinutes = 60` (default 1h, protege flood) — CONFIRMADO
+2. 🔄 CloudWatch alarm para flood detection — PENDENTE (manual setup via OPERATIONS.md)
+3. ✅ Teste end-to-end em staging — CONCLUÍDO
+4. ✅ Runbook: diagnóstico + recovery — [FAILURE_RUNBOOK.md](FAILURE_RUNBOOK.md) CONCLUÍDO
+
+**Documentação:**
+- [ARCHITECTURE.md](ARCHITECTURE.md) — design + flow + decisions
+- [OPERATIONS.md](OPERATIONS.md) — monitoring + maintenance + tuning
+- [FAILURE_RUNBOOK.md](FAILURE_RUNBOOK.md) — troubleshooting + recovery
+- [README.md](../README.md) — entry point + quick links
