@@ -241,9 +241,9 @@ func (s *RotationService) finishSecret(ctx context.Context, event RotationEvent)
 
 ## PENDÊNCIAS DECLARADAS
 
-1. **CloudWatch alarm** — Alertar se `createSecret` invocações/hora > X (flood detection)
-2. **Teste end-to-end staging** — Validar rotação completa em staging (não apenas unitário)
-3. **Runbook failure** — Documentar investigação: "Rotação falhou — diagnóstico + recovery steps"
+1. **CloudWatch alarm** — Alertar se `createSecret` invocações/hora > X (flood detection) — `TODO`
+2. **Teste end-to-end staging** — Validar rotação completa em staging — `CONCLUÍDO`
+3. **Runbook failure** — Documentar investigação — [FAILURE_RUNBOOK.md](FAILURE_RUNBOOK.md) `CONCLUÍDO`
 
 ---
 
