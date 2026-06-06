@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.1](https://github.com/brunojet/go-edge-key-management/compare/v1.2.0...v1.2.1) (2026-06-06)
+
+
+### Documentation
+
+* comprehensive documentation overhaul ([9f3e112](https://github.com/brunojet/go-edge-key-management/commit/9f3e11237a9e00cce500f94d8c9156b3d7d30c0d))
+* comprehensive documentation overhaul ([ca2066c](https://github.com/brunojet/go-edge-key-management/commit/ca2066c1a6d45eb25250f1194d0b253c5e0ea42b))
+* improve README with clear navigation and getting started ([00da176](https://github.com/brunojet/go-edge-key-management/commit/00da17638108fc8ad231631fdadc20b5cd41a044))
+* update risk analysis with completion status and doc links ([0215590](https://github.com/brunojet/go-edge-key-management/commit/02155905803b56d8191d6820bda6a69830730349))
+
 ## [1.2.0](https://github.com/brunojet/go-edge-key-management/compare/v1.1.0...v1.2.0) (2026-06-06)
 
 
