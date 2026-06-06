@@ -5,8 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/build"
 mkdir -p "$OUT"
 
-echo "Building rotator (linux)"
-GOOS=linux GOARCH=amd64 go build -o "$OUT/rotator" ./cmd/rotator
+echo "Building rotator (linux/arm64)"
+GOOS=linux GOARCH=arm64 go build -o "$OUT/rotator" ./cmd/rotator
 pushd "$OUT" > /dev/null
 
 # When creating the package we want only a single executable named 'bootstrap' inside the zip

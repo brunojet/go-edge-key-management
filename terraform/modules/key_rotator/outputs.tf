@@ -22,3 +22,11 @@ output "key_group_name" {
   value       = local.key_group_name_effective
   description = "CloudFront KeyGroup name used by the rotator (module creates one if var.key_group_name is empty)"
 }
+
+output "log_group_name" {
+  value = aws_cloudwatch_log_group.lambda_logs.name
+}
+
+output "log_retention_days" {
+  value = aws_cloudwatch_log_group.lambda_logs.retention_in_days
+}

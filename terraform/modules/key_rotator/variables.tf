@@ -8,12 +8,12 @@ variable "lambda_zip" {
 
 variable "handler" {
   type    = string
-  default = "rotator"
+  default = "bootstrap"
 }
 
 variable "runtime" {
   type    = string
-  default = "provided.al2023"
+  default = "provided.al2"
 }
 
 variable "rotation_days" {
@@ -22,18 +22,13 @@ variable "rotation_days" {
 }
 
 variable "secret_name" {
-  type = string
+  type    = string
   default = ""
 }
 
 variable "key_group_name" {
   type    = string
   default = ""
-}
-
-variable "initial_public_key_ids" {
-  type    = list(string)
-  default = []
 }
 
 variable "lambda_memory_size" {
@@ -64,4 +59,9 @@ variable "min_public_keys_to_keep" {
 variable "only_delete_managed_keys" {
   type    = bool
   default = true
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 14
 }
