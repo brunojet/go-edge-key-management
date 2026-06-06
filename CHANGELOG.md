@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.2.0](https://github.com/brunojet/go-edge-key-management/compare/v1.1.0...v1.2.0) (2026-06-06)
+
+
+### Features
+
+* Improve test coverage to 97.1% (&gt;=96% requirement) ([0f78de7](https://github.com/brunojet/go-edge-key-management/commit/0f78de730ef649e8767fee9d71f070e30dc70239))
+
+
+### Bug Fixes
+
+* remove coverage file before mkdir in coverage script ([77de25d](https://github.com/brunojet/go-edge-key-management/commit/77de25d1cc209c7710f8613b89b2309729445ca0))
+
+
+### Documentation
+
+* Add upgrade guide for go-infra-adapters v4.0.0 ([74a64e7](https://github.com/brunojet/go-edge-key-management/commit/74a64e74ae2c7f40bf8a6a552e3763f66ef5891d))
+
+
+### Code Refactoring
+
+* code formatting, terraform hardening, arm64 support ([fff276b](https://github.com/brunojet/go-edge-key-management/commit/fff276bb7e3af2ae130812536a5d31152345d8ef))
+* terraform improvements - arm64, logging, sanitization ([14000ea](https://github.com/brunojet/go-edge-key-management/commit/14000ea6a50bf7f1430fd337d5d9eaee4690cb75))
+
 ## [1.1.0](https://github.com/brunojet/go-edge-key-management/compare/v1.0.0...v1.1.0) (2026-06-04)
 
 
