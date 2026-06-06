@@ -4,6 +4,7 @@ set -euo pipefail
 COV_DIR="coverage"
 MERGED="${COV_DIR}/coverage.out"
 
+rm -f "${COV_DIR}"
 mkdir -p "${COV_DIR}"
 
 ALL_PKGS=$(go list ./... 2>/dev/null \
