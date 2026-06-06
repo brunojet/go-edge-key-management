@@ -4,6 +4,13 @@ locals {
   secret_name_effective = var.secret_name != "" ? var.secret_name : "/${var.name}/rotator"
 }
 
+resource "aws_cloudwatch_log_group" "lambda_logs" {
+  name              = "/aws/lambda/${var.name}-rotator"
+  retention_in_days = var.log_retention_days
+
+  tags = var.tags
+}
+
 resource "aws_iam_role" "lambda_role" {
   name = "${var.name}-lambda-role"
   assume_role_policy = jsonencode({
@@ -26,15 +33,16 @@ resource "aws_lambda_function" "rotator" {
   function_name    = "${var.name}-rotator"
   handler          = var.handler
   runtime          = var.runtime
+  architectures    = ["arm64"]
   role             = aws_iam_role.lambda_role.arn
   source_code_hash = filebase64sha256("${path.root}/${var.lambda_zip}")
   memory_size      = var.lambda_memory_size
   timeout          = var.lambda_timeout
   environment {
     variables = {
-      SECRET_NAME  = aws_secretsmanager_secret.rotator_secret.name
-      NAME_PREFIX  = var.name
-      KEY_GROUP_NAME = local.key_group_name_effective
+      SECRET_NAME              = aws_secretsmanager_secret.rotator_secret.name
+      NAME_PREFIX              = var.name
+      KEY_GROUP_NAME           = local.key_group_name_effective
       KEY_RETENTION_DAYS       = tostring(var.key_retention_days)
       MIN_PUBLIC_KEYS_TO_KEEP  = tostring(var.min_public_keys_to_keep)
       ONLY_DELETE_MANAGED_KEYS = tostring(var.only_delete_managed_keys)
@@ -51,8 +59,8 @@ resource "aws_lambda_permission" "allow_secretsmanager" {
 }
 
 resource "aws_secretsmanager_secret_rotation" "rotator_rotation" {
-  secret_id            = aws_secretsmanager_secret.rotator_secret.id
-  rotation_lambda_arn  = aws_lambda_function.rotator.arn
+  secret_id           = aws_secretsmanager_secret.rotator_secret.id
+  rotation_lambda_arn = aws_lambda_function.rotator.arn
   rotation_rules {
     automatically_after_days = var.rotation_days
   }

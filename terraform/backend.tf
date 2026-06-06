@@ -3,10 +3,10 @@
 
 terraform {
   backend "s3" {
-    bucket = "brunojet-tfstate"
-    key    = "go-edge-key-management/terraform.tfstate"
-    region = "us-east-1"
-    encrypt = true
+    bucket       = "brunojet-tfstate"
+    key          = "go-edge-key-management/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
     use_lockfile = true
   }
 }

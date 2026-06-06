@@ -11,10 +11,6 @@ tags = {
 # the module defaults to "${var.name}-key-group").
 key_group_name = ""
 
-# Optional: initial public key IDs to include when Terraform should create the KeyGroup.
-# If you want Terraform to create the KeyGroup, supply at least one public key ID here.
-initial_public_key_ids = []
-
 # Lambda runtime resource sizing
 lambda_memory_size = 128
 lambda_timeout = 30
